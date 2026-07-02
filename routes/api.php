@@ -18,4 +18,5 @@ Route::get('/get-dealer', function (Request $request) {
     return response()->json($dealers);
 });
 
-Route::post('/bpkb/process', BpkbController::class . '@process');
+Route::post('/bpkb/process', [BpkbController::class, 'process']);
+Route::get('/bpkb/track/{track}', [BpkbController::class, 'track']);
