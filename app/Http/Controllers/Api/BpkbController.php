@@ -4,69 +4,51 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\BpkbRequest;
-use App\Models\MasterCustomer;
+use App\Jobs\ProcessBpkbJob;
+use App\Models\BpkbProcessTrack;
 use App\Models\StokUnit;
-use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 
 class BpkbController extends Controller
 {
-    public function process(BpkbRequest $request)
+    public function process(BpkbRequest $request): JsonResponse
     {
         $valid = $request->validated();
-        $stokUnit = StokUnit::with('masterCustomer')
+
+        // Persist images to storage BEFORE dispatching (temp files die with the request)
+        $imagePaths = [];
+        foreach ($valid['images'] as $image) {
+            $path = $image->store('bpkb/temp', 'public');
+            $imagePaths[] = $path;
+        }
+
+        // Look up customer name
+        $stokUnit = StokUnit::select('nm_customer')
             ->where('no_mesin', $valid['nomesin'])
             ->first();
 
-        $namaKonsumen = $stokUnit?->masterCustomer?->NamaCustomer;
+        // Create tracking record
+        $track = BpkbProcessTrack::create([
+            'no_mesin'       => $valid['nomesin'],
+            'no_bpkb'        => $valid['nobpkb'],
+            'nama_konsumen'  => $stokUnit?->nm_customer,
+            'image_paths'    => $imagePaths,
+            'stage'          => 'pending',
+            'status'         => 'queued',
+        ]);
 
-        $images = [];
-        $paths = [];
-        $maxW = 0;
-        $maxH = 0;
-        foreach ($valid['images'] as $image) {
-            $tmp = $image->getRealPath();
-            $size = getimagesize($tmp);
-            $w = $size[0] * 0.75;
-            $h = $size[1] * 0.75;
-            $maxW = max($maxW, $w);
-            $maxH = max($maxH, $h);
-            $path = $image->store('bpkb', 'public');
-            $paths[] = $path;
-
-            $src = match (strtolower($image->getClientOriginalExtension())) {
-                'png' => imagecreatefrompng($tmp),
-                default => imagecreatefromjpeg($tmp),
-            };
-            $img = imagecreatetruecolor(imagesx($src), imagesy($src));
-            imagefill($img, 0, 0, imagecolorallocate($img, 255, 255, 255));
-            imagecopy($img, $src, 0, 0, 0, 0, imagesx($src), imagesy($src));
-            imagedestroy($src);
-            ob_start();
-            imagejpeg($img, null, 50);
-            $compressed = ob_get_clean();
-            imagedestroy($img);
-
-            $images[] = [
-                'base64' => base64_encode($compressed),
-                'width' => $w,
-                'height' => $h,
-            ];
-        }
-
-        $pdf = Pdf::loadView('pdf.bpkb', compact('images', 'namaKonsumen'))
-            ->setPaper([0, 0, $maxW, $maxH]);
-
-        $filename = $namaKonsumen . '.pdf';
-        Storage::disk('public')->put('bpkb/pdf/' . $filename, $pdf->output());
-
-        foreach ($paths as $path) {
-            Storage::disk('public')->delete($path);
-        }
+        // Dispatch queued job
+        ProcessBpkbJob::dispatch($track);
 
         return response()->json([
-            'message' => 'PDF berhasil dibuat.',
-        ]);
+            'message'   => 'BPKB sedang diproses.',
+            'track_id'  => $track->id,
+        ], 202);
+    }
+
+    public function track(BpkbProcessTrack $track): JsonResponse
+    {
+        return response()->json($track);
     }
 }

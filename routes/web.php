@@ -85,4 +85,9 @@ Route::prefix('errors')->group(function () {
     })->name('errors.maintenance-error');
 });
 
+Route::get('/bpkb/track', function () {
+    $tracks = \App\Models\BpkbProcessTrack::orderByDesc('created_at')->get();
+    return view('bpkb-track', ['tracks' => $tracks]);
+})->name('bpkb.track');
+
 require __DIR__.'/auth.php';
