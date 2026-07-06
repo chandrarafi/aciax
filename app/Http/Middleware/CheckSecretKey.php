@@ -10,7 +10,7 @@ class CheckSecretKey
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $secretKey = $request->header('SECRET_KEY') ?? $request->query('secret_key');
+        $secretKey = $request->header('SECRET-KEY') ?? $request->header('SECRET_KEY') ?? $request->query('secret_key');
 
         if (!$secretKey || $secretKey !== config('app.secret_key')) {
             return response()->json([
