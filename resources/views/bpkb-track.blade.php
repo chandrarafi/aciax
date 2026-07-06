@@ -184,28 +184,56 @@
             card.querySelector('[data-timeline]').innerHTML = html;
             card.dataset.status = data.status;
 
-            if (isCompleted && data.pdf_path && !card.querySelector('.download-btn')) {
+            if (isCompleted && data.pdf_url && !card.querySelector('.download-btn')) {
                 const div = document.createElement('div');
                 div.className = 'download-btn';
-                div.innerHTML = '<a class="btn btn-primary btn-sm" href="/storage/' + data.pdf_path + '" target="_blank">&#8681; Download PDF</a>';
+                div.innerHTML = '<a class="btn btn-primary btn-sm" href="' + data.pdf_url + '" target="_blank">&#8681; Download PDF</a>';
                 card.appendChild(div);
             }
         }
 
-        async function pollAll() {
-            const cards = document.querySelectorAll('[data-track-id]');
-            for (const card of cards) {
-                if (card.dataset.status === 'completed' || card.dataset.status === 'failed') continue;
-                try {
-                    const res = await fetch('/api/bpkb/track/' + card.dataset.trackId, {
-                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
-                    });
-                    if (res.ok) renderTimeline(card, await res.json());
-                } catch {}
-            }
+        // SSE connections per card
+        const activeStreams = {};
+
+        function connectSSE(card) {
+            const trackId = card.dataset.trackId;
+            const status = card.dataset.status;
+            if (status === 'completed' || status === 'failed') return;
+            if (activeStreams[trackId]) return;
+
+            const es = new EventSource('/api/bpkb/track/' + trackId + '/stream?secret_key={{ config("app.secret_key") }}');
+            activeStreams[trackId] = es;
+
+            es.onmessage = function (e) {
+                const data = JSON.parse(e.data);
+                renderTimeline(card, data);
+
+                if (data.status === 'completed' || data.status === 'failed') {
+                    es.close();
+                    delete activeStreams[trackId];
+                }
+            };
+
+            es.onerror = function () {
+                es.close();
+                delete activeStreams[trackId];
+                // Reconnect after 3s if still processing
+                if (card.dataset.status !== 'completed' && card.dataset.status !== 'failed') {
+                    setTimeout(() => connectSSE(card), 3000);
+                }
+            };
         }
 
-        setInterval(pollAll, 1500);
+        // Connect SSE for all active cards on page load
+        document.querySelectorAll('[data-track-id]').forEach(card => connectSSE(card));
+
+        // Auto-refresh page every 30s to pick up newly queued items (only if no active streams are processing)
+        setInterval(async () => {
+            const hasActive = document.querySelectorAll('[data-track-id][data-status="queued"], [data-track-id][data-status="processing"]').length > 0;
+            if (!hasActive) {
+                location.reload();
+            }
+        }, 30000);
     </script>
 </body>
 </html>

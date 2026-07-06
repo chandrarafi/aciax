@@ -28,9 +28,9 @@ class ProcessBpkbJob implements ShouldQueue
 
         try {
             $this->createPdf();
+            $this->cleanupTempImages();
             $this->updateStokUnit();
             $this->updateTglBpkbSiap();
-            $this->cleanupTempImages();
 
             $this->track->update([
                 'stage'  => 'completed',
@@ -61,7 +61,7 @@ class ProcessBpkbJob implements ShouldQueue
         }
 
         $this->track->update(['stage' => 'create_pdf']);
-        sleep(5);
+        sleep(2);
 
         $imagePaths = $this->track->image_paths ?? [];
         $images = [];
@@ -114,12 +114,13 @@ class ProcessBpkbJob implements ShouldQueue
         foreach ($this->track->image_paths ?? [] as $imagePath) {
             Storage::disk('public')->delete($imagePath);
         }
+        $this->track->update(['image_paths' => null]);
     }
 
     private function updateStokUnit(): void
     {
         $this->track->update(['stage' => 'update_stok_unit']);
-        sleep(5);
+        sleep(2);
 
         DB::connection('pgsql_meta')
             ->table('tblstock_unit')
@@ -130,7 +131,7 @@ class ProcessBpkbJob implements ShouldQueue
     private function updateTglBpkbSiap(): void
     {
         $this->track->update(['stage' => 'update_tgl_bpkb_siap']);
-        sleep(5);
+        sleep(2);
 
         $detail = DB::connection('pgsql_meta')
             ->table('tblterima_bpkb_detail')
