@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class TerimaBpkbDetail extends Model
 {
-    protected $connection = 'pgsql_meta';
-    protected $table = 'tblterima_bpkb_detail';
+    protected $connection = 'pgsql_nms';
+    protected $table = 'data_unit.tblterima_bpkb_detail';
 
 }
