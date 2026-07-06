@@ -51,4 +51,43 @@ class BpkbController extends Controller
     {
         return response()->json($track);
     }
+
+    public function trackStream(BpkbProcessTrack $track): \Symfony\Component\HttpFoundation\StreamedResponse
+    {
+        return response()->stream(function () use ($track) {
+            $lastStage = null;
+            $lastStatus = null;
+
+            while (true) {
+                $track->refresh();
+
+                if ($track->stage !== $lastStage || $track->status !== $lastStatus) {
+                    $data = json_encode([
+                        'stage'        => $track->stage,
+                        'status'       => $track->status,
+                        'pdf_url'      => $track->pdf_path ? Storage::disk('public')->url($track->pdf_path) : null,
+                        'error_message'=> $track->error_message,
+                    ]);
+
+                    echo "data: {$data}\n\n";
+                    ob_flush();
+                    flush();
+
+                    $lastStage = $track->stage;
+                    $lastStatus = $track->status;
+                }
+
+                if (in_array($track->status, ['completed', 'failed'])) {
+                    break;
+                }
+
+                // sleep(1);
+            }
+        }, 200, [
+            'Content-Type'  => 'text/event-stream',
+            'Cache-Control' => 'no-cache',
+            'Connection'    => 'keep-alive',
+            'X-Accel-Buffering' => 'no',
+        ]);
+    }
 }
