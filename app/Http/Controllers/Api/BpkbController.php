@@ -9,6 +9,7 @@ use App\Models\BpkbProcessTrack;
 use App\Models\StokUnit;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Storage;
+use App\Models\TerimaBpkb;
 
 class BpkbController extends Controller
 {
@@ -88,6 +89,23 @@ class BpkbController extends Controller
             'Cache-Control' => 'no-cache',
             'Connection'    => 'keep-alive',
             'X-Accel-Buffering' => 'no',
+        ]);
+    }
+
+    public function activity(): JsonResponse
+    {
+        // $monthNow = now()->format('Y-m');
+        $monthNow = '2026-04';
+        $targetBpkb = TerimaBpkb::where('tgl_tanda_terima', 'like', "{$monthNow}%")->count();
+        $completedBpkb = BpkbProcessTrack::where('status', 'completed')
+                        ->where('created_at', 'like', "{$monthNow}%")
+                        ->count();
+        $pendingBpkb = $targetBpkb - $completedBpkb;
+
+        return response()->json([
+            'target_bpkb' => $targetBpkb,
+            'completed_bpkb' => $completedBpkb,
+            'pending_bpkb' => $pendingBpkb,
         ]);
     }
 }
