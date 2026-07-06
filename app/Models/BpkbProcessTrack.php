@@ -9,7 +9,7 @@ class BpkbProcessTrack extends Model
 {
     use HasUuids;
 
-    protected $table = 'acix.bpkb_process_tracks';
+    protected $table = 'aciax.bpkb_process_tracks';
 
     protected $fillable = [
         'no_mesin',
