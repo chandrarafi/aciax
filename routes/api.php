@@ -13,7 +13,8 @@ Route::get('/user', function (Request $request) {
 Route::get('/get-dealer', function (Request $request) {
     $dealers = DB::connection('pgsql_nms')
         ->table('H1_DOS.stokunit as stokunit')
-        ->select(['stokunit.fk_dealer', 'd.nm_dealer'])
+        ->select(['stokunit.fk_dealer', 'd.nm_dealer',
+            DB::raw("CASE WHEN stokunit.bentuk_penjualan = '1' THEN 'Cash' WHEN stokunit.bentuk_penjualan = '2' THEN 'Kredit' ELSE 'Lainnya' END as bentuk_penjualan"),])
         ->join('public.tbldealer as d', 'd.kd_dealer_md', '=', 'stokunit.fk_dealer')
         ->where('stokunit.no_mesin', $request->input('nomesin'))
         ->first();
