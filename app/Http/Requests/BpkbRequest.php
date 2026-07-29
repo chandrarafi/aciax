@@ -24,7 +24,7 @@ class BpkbRequest extends FormRequest
     {
         return [
             'nomesin' => ['required', 'string', 'max:16'],
-            'nobpkb' => ['required', 'string', 'max:20'],
+            'nobpkb' => ['required', 'string'],
             'images' => ['required', 'array', 'size:4'],
             'images.*' => ['required', 'image', 'mimes:jpeg,png,jpg'],
         ];
@@ -39,7 +39,7 @@ class BpkbRequest extends FormRequest
             'nomesin.exists' => 'Nomor Mesin tidak ditemukan di database.',
             'nobpkb.required' => 'Nomor BPKB harus diisi.',
             'nobpkb.string' => 'Nomor BPKB harus berupa string.',
-            'nobpkb.max' => 'Nomor BPKB tidak boleh lebih dari 20 karakter.',
+            // 'nobpkb.max' => 'Nomor BPKB tidak boleh lebih dari 20 karakter.',
             'images.required' => 'Gambar harus diunggah.',
             'images.array' => 'Gambar harus berupa array.',
             'images.size' => 'Harus mengunggah tepat 4 gambar.',

@@ -18,8 +18,9 @@ class BpkbController extends Controller
     {
         $valid = $request->validated();
 
-        // Perform cleansing on requested no_mesin
+        // Perform cleansing on requested no_mesin and no_bpkb
         $cleansedNoMesin = $this->cleansingNoMesin($valid['nomesin']);
+        $cleansedNoBpkb  = $this->cleansingNoBpkb($valid['nobpkb']);
 
         $imagePaths = [];
         foreach ($valid['images'] as $image) {
@@ -33,7 +34,7 @@ class BpkbController extends Controller
 
         $track = BpkbProcessTrack::create([
             'no_mesin'       => $cleansedNoMesin,
-            'no_bpkb'        => $valid['nobpkb'],
+            'no_bpkb'        => $cleansedNoBpkb,
             'nama_konsumen'  => $stokUnit?->nm_customer,
             'image_paths'    => $imagePaths,
             'stage'          => 'pending',
@@ -46,7 +47,29 @@ class BpkbController extends Controller
             'message'           => 'BPKB sedang diproses.',
             'track_id'          => $track->id,
             // 'no_mesin_cleansed' => $cleansedNoMesin,
+            // 'no_bpkb_cleansed'  => $cleansedNoBpkb,
         ], 202);
+    }
+
+    /**
+     * Function untuk melakukan cleansing no_bpkb dari request.
+     * 
+     * Contoh Input : "W02371856-BPKB POLRI 2025"
+     * Result Output: "W-02371856"
+     * 
+     * @param string $rawNoBpkb
+     * @return string
+     */
+    public function cleansingNoBpkb(string $rawNoBpkb): string
+    {
+        $rawNoBpkb = strtoupper(trim($rawNoBpkb));
+
+        // Mengambil kode utama BPKB (huruf pertama + '-' + angka/kode serial)
+        if (preg_match('/^([A-Z])\s*\-?\s*([0-9A-Z]+)/i', $rawNoBpkb, $matches)) {
+            return strtoupper($matches[1] . '-' . $matches[2]);
+        }
+
+        return $rawNoBpkb;
     }
 
     /**
