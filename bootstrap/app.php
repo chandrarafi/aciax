@@ -15,8 +15,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             \App\Http\Middleware\HandleInertiaRequests::class,
         ]);
-        $middleware->api(prepend: [
-            \App\Http\Middleware\CheckSecretKey::class,
+        $middleware->alias([
+            'check-secret-key' => \App\Http\Middleware\CheckSecretKey::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
