@@ -55,6 +55,9 @@ class ProcessBpkbJob implements ShouldQueue
 
     private function createPdf(): void
     {
+        // Naikkan memory limit untuk proses pembuatan PDF dengan gambar
+        ini_set('memory_limit', '512M');
+
         // Skip if PDF already generated (idempotent retry)
         if ($this->track->pdf_path && Storage::disk('public')->exists($this->track->pdf_path)) {
             return;
@@ -70,39 +73,71 @@ class ProcessBpkbJob implements ShouldQueue
 
         foreach ($imagePaths as $imagePath) {
             $tmp = Storage::disk('public')->path($imagePath);
-            $size = getimagesize($tmp);
-            $w = $size[0] * 0.75;
-            $h = $size[1] * 0.75;
-            $maxW = max($maxW, $w);
-            $maxH = max($maxH, $h);
+            if (!file_exists($tmp)) {
+                continue;
+            }
 
-            $src = match (strtolower(pathinfo($imagePath, PATHINFO_EXTENSION))) {
-                'png' => imagecreatefrompng($tmp),
-                default => imagecreatefromjpeg($tmp),
+            $size = @getimagesize($tmp);
+            if (!$size) {
+                continue;
+            }
+
+            $origW = $size[0];
+            $origH = $size[1];
+
+            // Downscale gambar resolusi tinggi (misal dari kamera 12MP/24MP) ke max lebar 1200px untuk menghemat RAM
+            $maxTargetW = 1200;
+            if ($origW > $maxTargetW) {
+                $scale = $maxTargetW / $origW;
+                $newW  = (int) ($origW * $scale);
+                $newH  = (int) ($origH * $scale);
+            } else {
+                $newW  = $origW;
+                $newH  = $origH;
+            }
+
+            $pdfW = $newW * 0.75;
+            $pdfH = $newH * 0.75;
+            $maxW = max($maxW, $pdfW);
+            $maxH = max($maxH, $pdfH);
+
+            $ext = strtolower(pathinfo($imagePath, PATHINFO_EXTENSION));
+            $src = match ($ext) {
+                'png'   => @imagecreatefrompng($tmp),
+                'webp'  => @imagecreatefromwebp($tmp),
+                default => @imagecreatefromjpeg($tmp),
             };
-            $img = imagecreatetruecolor(imagesx($src), imagesy($src));
+
+            if (!$src) {
+                continue;
+            }
+
+            // Buat canvas baru sesuai ukuran yang sudah di-downscale
+            $img = imagecreatetruecolor($newW, $newH);
             imagefill($img, 0, 0, imagecolorallocate($img, 255, 255, 255));
-            imagecopy($img, $src, 0, 0, 0, 0, imagesx($src), imagesy($src));
-            imagedestroy($src);
+            imagecopyresampled($img, $src, 0, 0, 0, 0, $newW, $newH, $origW, $origH);
+            imagedestroy($src); // Bebaskan memori gambar mentah segera
 
             ob_start();
-            imagejpeg($img, null, 50);
+            imagejpeg($img, null, 60);
             $compressed = ob_get_clean();
-            imagedestroy($img);
+            imagedestroy($img); // Bebaskan memori canvas
 
             $images[] = [
                 'base64' => base64_encode($compressed),
-                'width'  => $w,
-                'height' => $h,
+                'width'  => $pdfW,
+                'height' => $pdfH,
             ];
+
+            unset($compressed);
         }
 
         $pdf = Pdf::loadView('pdf.bpkb', [
             'images'        => $images,
             'namaKonsumen'  => $this->track->nama_konsumen,
-        ])->setPaper([0, 0, $maxW, $maxH]);
+        ])->setPaper([0, 0, $maxW ?: 800, $maxH ?: 1100]);
 
-        $filename = $this->track->nama_konsumen . '.pdf';
+        $filename = ($this->track->nama_konsumen ?: 'bpkb_' . $this->track->id) . '.pdf';
         $pdfPath = 'bpkb/pdf/' . $filename;
         Storage::disk('public')->put($pdfPath, $pdf->output());
 
