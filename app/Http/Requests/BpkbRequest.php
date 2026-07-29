@@ -26,7 +26,7 @@ class BpkbRequest extends FormRequest
             'nomesin' => ['required', 'string', 'max:16', 'exists:pgsql_nms.stokunit,no_mesin'],
             'nobpkb' => ['required', 'string', 'max:20'],
             'images' => ['required', 'array', 'size:4'],
-            'images.*' => ['required', 'image', 'mimes:jpeg,png,jpg', 'max:1048'],
+            'images.*' => ['required', 'image', 'mimes:jpeg,png,jpg'],
         ];
     }
 
