@@ -10,6 +10,15 @@ class CheckSecretKey
 {
     public function handle(Request $request, Closure $next): Response
     {
+        // Bypass secret key verification for CORS preflight (OPTIONS) requests
+        if ($request->isMethod('OPTIONS')) {
+            return response('', 200)
+                ->header('Access-Control-Allow-Origin', '*')
+                ->header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS')
+                ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, SECRET-KEY, SECRET_KEY, secret-key, secret_key, Accept')
+                ->header('Access-Control-Max-Age', '86400');
+        }
+
         $secretKey = $request->header('SECRET-KEY') ?? $request->header('SECRET_KEY') ?? $request->query('secret_key');
 
         if (!$secretKey || $secretKey !== config('app.secret_key')) {
