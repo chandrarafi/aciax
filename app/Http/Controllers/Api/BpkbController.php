@@ -21,31 +21,31 @@ class BpkbController extends Controller
         // Perform cleansing on requested no_mesin
         $cleansedNoMesin = $this->cleansingNoMesin($valid['nomesin']);
 
-        // $imagePaths = [];
-        // foreach ($valid['images'] as $image) {
-        //     $path = $image->store('bpkb/temp', 'public');
-        //     $imagePaths[] = $path;
-        // }
+        $imagePaths = [];
+        foreach ($valid['images'] as $image) {
+            $path = $image->store('bpkb/temp', 'public');
+            $imagePaths[] = $path;
+        }
 
-        // $stokUnit = StokUnit::select('nm_customer')
-        //     ->where('no_mesin', $cleansedNoMesin)
-        //     ->first();
+        $stokUnit = StokUnit::select('nm_customer')
+            ->where('no_mesin', $cleansedNoMesin)
+            ->first();
 
-        // $track = BpkbProcessTrack::create([
-        //     'no_mesin'       => $cleansedNoMesin,
-        //     'no_bpkb'        => $valid['nobpkb'],
-        //     'nama_konsumen'  => $stokUnit?->nm_customer,
-        //     'image_paths'    => $imagePaths,
-        //     'stage'          => 'pending',
-        //     'status'         => 'queued',
-        // ]);
+        $track = BpkbProcessTrack::create([
+            'no_mesin'       => $cleansedNoMesin,
+            'no_bpkb'        => $valid['nobpkb'],
+            'nama_konsumen'  => $stokUnit?->nm_customer,
+            'image_paths'    => $imagePaths,
+            'stage'          => 'pending',
+            'status'         => 'queued',
+        ]);
 
-        // ProcessBpkbJob::dispatch($track);
+        ProcessBpkbJob::dispatch($track);
 
         return response()->json([
-            // 'message'           => 'BPKB sedang diproses.',
-            // 'track_id'          => $track->id,
-            'no_mesin_cleansed' => $cleansedNoMesin,
+            'message'           => 'BPKB sedang diproses.',
+            'track_id'          => $track->id,
+            // 'no_mesin_cleansed' => $cleansedNoMesin,
         ], 202);
     }
 
@@ -136,15 +136,28 @@ class BpkbController extends Controller
     private function cleansingSerialDigits(string $serial): string
     {
         $charToDigitMap = [
-            'O' => '0', 'o' => '0',
-            'I' => '1', 'i' => '1', 'L' => '1', 'l' => '1',
-            'Z' => '2', 'z' => '2',
-            'E' => '3', 'e' => '3',
-            'A' => '4', 'a' => '4',
-            'S' => '5', 's' => '5',
-            'T' => '7', 't' => '7',
-            'B' => '8', 'b' => '8',
-            'G' => '9', 'g' => '9', 'Q' => '9', 'q' => '9',
+            'O' => '0',
+            'o' => '0',
+            'I' => '1',
+            'i' => '1',
+            'L' => '1',
+            'l' => '1',
+            'Z' => '2',
+            'z' => '2',
+            'E' => '3',
+            'e' => '3',
+            'A' => '4',
+            'a' => '4',
+            'S' => '5',
+            's' => '5',
+            'T' => '7',
+            't' => '7',
+            'B' => '8',
+            'b' => '8',
+            'G' => '9',
+            'g' => '9',
+            'Q' => '9',
+            'q' => '9',
         ];
 
         return strtr($serial, $charToDigitMap);
