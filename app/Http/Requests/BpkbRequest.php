@@ -23,7 +23,7 @@ class BpkbRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'nomesin' => ['required', 'string', 'max:16', 'exists:pgsql_nms.stokunit,no_mesin'],
+            'nomesin' => ['required', 'string', 'max:16'],
             'nobpkb' => ['required', 'string', 'max:20'],
             'images' => ['required', 'array', 'size:4'],
             'images.*' => ['required', 'image', 'mimes:jpeg,png,jpg'],
