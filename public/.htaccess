@@ -13,6 +13,12 @@
     RewriteCond %{HTTP:x-xsrf-token} .
     RewriteRule .* - [E=HTTP_X_XSRF_TOKEN:%{HTTP:X-XSRF-Token}]
 
+    # Handle SECRET-KEY Header
+    RewriteCond %{HTTP:SECRET-KEY} .
+    RewriteRule .* - [E=HTTP_SECRET_KEY:%{HTTP:SECRET-KEY}]
+    RewriteCond %{HTTP:SECRET_KEY} .
+    RewriteRule .* - [E=HTTP_SECRET_KEY:%{HTTP:SECRET_KEY}]
+
     # Redirect Trailing Slashes If Not A Folder...
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_URI} (.+)/$

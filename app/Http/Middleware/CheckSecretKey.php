@@ -19,7 +19,12 @@ class CheckSecretKey
                 ->header('Access-Control-Max-Age', '86400');
         }
 
-        $secretKey = $request->header('SECRET-KEY') ?? $request->header('SECRET_KEY') ?? $request->query('secret_key');
+        $secretKey = $request->header('SECRET-KEY')
+            ?? $request->header('SECRET_KEY')
+            ?? $request->header('secret-key')
+            ?? $request->header('secret_key')
+            ?? $request->query('secret_key')
+            ?? $request->input('secret_key');
 
         if (!$secretKey || $secretKey !== config('app.secret_key')) {
             return response()->json([
