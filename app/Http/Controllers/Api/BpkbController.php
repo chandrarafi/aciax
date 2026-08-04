@@ -8,6 +8,7 @@ use App\Jobs\ProcessBpkbJob;
 use App\Models\BpkbProcessTrack;
 use App\Models\StokUnit;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use App\Models\TerimaBpkb;
 use Illuminate\Support\Facades\DB;
@@ -245,5 +246,44 @@ class BpkbController extends Controller
             'completed_bpkb' => $completedBpkb,
             'pending_bpkb' => $pendingBpkb,
         ]);
+    }
+
+    public function activityToday(): JsonResponse
+    {
+        $count = BpkbProcessTrack::where('status', 'completed')
+            ->whereDate('created_at', today())
+            ->count();
+
+        $target = (int) config('bpkb.daily_target', 100);
+
+        return response()->json([
+            'count'  => $count,
+            'target' => $target,
+            'date'   => now()->toDateString(),
+        ]);
+    }
+
+    public function recent(Request $request): JsonResponse
+    {
+        $limit = (int) $request->query('limit', 5);
+        if ($limit <= 0) {
+            $limit = 5;
+        }
+
+        $tracks = BpkbProcessTrack::orderBy('created_at', 'desc')
+            ->take($limit)
+            ->get();
+
+        $data = $tracks->map(function (BpkbProcessTrack $track) {
+            return [
+                'track_id'   => (string) $track->id,
+                'nobpkb'     => (string) $track->no_bpkb,
+                'nomesin'    => (string) $track->no_mesin,
+                'status'     => (string) $track->status,
+                'created_at' => $track->created_at ? (is_string($track->created_at) ? $track->created_at : $track->created_at->format('Y-m-d H:i:s')) : null,
+            ];
+        });
+
+        return response()->json($data);
     }
 }

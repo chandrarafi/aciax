@@ -8,7 +8,11 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('bpkb_process_tracks', function (Blueprint $table) {
+        \Illuminate\Support\Facades\DB::statement('CREATE SCHEMA IF NOT EXISTS aciax');
+        Schema::dropIfExists('aciax.bpkb_process_tracks');
+        Schema::dropIfExists('bpkb_process_tracks');
+
+        Schema::create('aciax.bpkb_process_tracks', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->string('no_mesin', 16)->index();
             $table->string('no_bpkb', 20);
@@ -24,6 +28,7 @@ return new class extends Migration
 
     public function down(): void
     {
+        Schema::dropIfExists('aciax.bpkb_process_tracks');
         Schema::dropIfExists('bpkb_process_tracks');
     }
 };

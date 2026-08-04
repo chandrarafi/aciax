@@ -23,7 +23,9 @@ Route::get('/get-dealer', function (Request $request) {
 
 Route::middleware('check-secret-key')->group(function () {
     Route::post('/bpkb/process', [BpkbController::class, 'process']);
+    Route::get('/bpkb/recent', [BpkbController::class, 'recent']);
     Route::get('/bpkb/track/{track}', [BpkbController::class, 'track']);
     Route::get('/bpkb/track/{track}/stream', [BpkbController::class, 'trackStream']);
     Route::get('/activity', [BpkbController::class, 'activity']);
+    Route::get('/activity/today', [BpkbController::class, 'activityToday']);
 });
