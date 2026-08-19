@@ -59,7 +59,7 @@ class ProcessBpkbJob implements ShouldQueue
         ini_set('memory_limit', '512M');
 
         // Skip if PDF already generated (idempotent retry)
-        if ($this->track->pdf_path && Storage::disk('public')->exists($this->track->pdf_path)) {
+        if ($this->track->pdf_path && Storage::disk('secure')->exists($this->track->pdf_path)) {
             return;
         }
 
@@ -137,9 +137,10 @@ class ProcessBpkbJob implements ShouldQueue
             'namaKonsumen'  => $this->track->nama_konsumen,
         ])->setPaper([0, 0, $maxW ?: 800, $maxH ?: 1100]);
 
-        $filename = ($this->track->nama_konsumen ?: 'bpkb_' . $this->track->id) . '.pdf';
+        $sanitizedName = $this->track->nama_konsumen ? str_replace(['/', '\\'], '_', $this->track->nama_konsumen) : 'bpkb_' . $this->track->id;
+        $filename = $sanitizedName . '.pdf';
         $pdfPath = 'bpkb/pdf/' . $filename;
-        Storage::disk('public')->put($pdfPath, $pdf->output());
+        Storage::disk('secure')->put($pdfPath, $pdf->output());
 
         $this->track->update(['pdf_path' => $pdfPath]);
     }

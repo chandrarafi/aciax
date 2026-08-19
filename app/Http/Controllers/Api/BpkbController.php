@@ -205,7 +205,7 @@ class BpkbController extends Controller
                     $data = json_encode([
                         'stage'        => $track->stage,
                         'status'       => $track->status,
-                        'pdf_url'      => $track->pdf_path ? Storage::disk('public')->url($track->pdf_path) : null,
+                        'pdf_url'      => $track->pdf_path ? route('bpkb.download', $track->id) : null,
                         'error_message' => $track->error_message,
                     ]);
 
@@ -229,6 +229,15 @@ class BpkbController extends Controller
             'Connection'    => 'keep-alive',
             'X-Accel-Buffering' => 'no',
         ]);
+    }
+
+    public function download(BpkbProcessTrack $track)
+    {
+        if (!$track->pdf_path || !Storage::disk('secure')->exists($track->pdf_path)) {
+            abort(404, 'File PDF BPKB tidak ditemukan.');
+        }
+
+        return Storage::disk('secure')->response($track->pdf_path);
     }
 
     public function activity(): JsonResponse

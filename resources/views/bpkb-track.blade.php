@@ -119,7 +119,7 @@
 
                 @if($track->status === 'completed' && $track->pdf_path)
                     <div class="download-btn">
-                        <a class="btn btn-primary btn-sm" href="/storage/{{ $track->pdf_path }}" target="_blank">&#8681; Download PDF</a>
+                        <a class="btn btn-primary btn-sm" href="{{ route('bpkb.download', $track->id) }}" target="_blank">&#8681; Download PDF</a>
                     </div>
                 @endif
             </div>

@@ -90,4 +90,6 @@ Route::get('/bpkb/track', function () {
     return view('bpkb-track', ['tracks' => $tracks]);
 })->name('bpkb.track');
 
+Route::get('/bpkb/download/{track}', [\App\Http\Controllers\Api\BpkbController::class, 'download'])->name('bpkb.download');
+
 require __DIR__.'/auth.php';

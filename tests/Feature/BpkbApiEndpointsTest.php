@@ -93,4 +93,22 @@ class BpkbApiEndpointsTest extends TestCase
                 ],
             ]);
     }
+
+    public function test_download_bpkb_pdf(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('secure');
+        $pdfPath = 'bpkb/pdf/test.pdf';
+        \Illuminate\Support\Facades\Storage::disk('secure')->put($pdfPath, 'dummy pdf content');
+
+        $track = BpkbProcessTrack::create([
+            'no_mesin'  => 'JME1E2977861',
+            'no_bpkb'   => 'W-02371851',
+            'stage'     => 'completed',
+            'status'    => 'completed',
+            'pdf_path'  => $pdfPath,
+        ]);
+
+        $response = $this->get("/bpkb/download/{$track->id}");
+        $response->assertStatus(200);
+    }
 }
