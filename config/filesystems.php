@@ -64,6 +64,7 @@ return [
             'driver' => 'local',
             'root' => env('SECURE_STORAGE_PATH', storage_path('app/secure')),
             'visibility' => 'private',
+            'throw' => false,
         ],
 
     ],

@@ -24,9 +24,18 @@ class BpkbController extends Controller
         $cleansedNoBpkb  = $this->cleansingNoBpkb($valid['nobpkb']);
 
         $imagePaths = [];
+        $tempDir = Storage::disk('secure')->path('bpkb/temp');
         foreach ($valid['images'] as $image) {
-            $path = $image->store('bpkb/temp', 'secure');
-            $imagePaths[] = $path;
+            $filename = $image->hashName();
+            try {
+                // Pindahkan langsung file upload ke folder bpkb/temp yang sudah dibuat di server
+                $image->move($tempDir, $filename);
+                $imagePaths[] = 'bpkb/temp/' . $filename;
+            } catch (\Throwable $e) {
+                // Fallback store jika move gagal
+                $path = $image->store('bpkb/temp', 'secure');
+                $imagePaths[] = $path;
+            }
         }
 
         $stokUnit = StokUnit::select('nm_customer')

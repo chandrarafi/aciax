@@ -179,7 +179,10 @@ class ProcessBpkbJob implements ShouldQueue
         ])->setPaper($paperSize);
 
         $pdfPath = 'bpkb/pdf/' . $filename;
-        Storage::disk('secure')->put($pdfPath, $pdfWm->output());
+        $fullPdfPath = Storage::disk('secure')->path($pdfPath);
+        if (@file_put_contents($fullPdfPath, $pdfWm->output()) === false) {
+            Storage::disk('secure')->put($pdfPath, $pdfWm->output());
+        }
 
         // 2. Simpan PDF Versi Clean (Tanpa Watermark)
         $pdfClean = Pdf::loadView('pdf.bpkb', [
@@ -188,7 +191,10 @@ class ProcessBpkbJob implements ShouldQueue
         ])->setPaper($paperSize);
 
         $pdfCleanPath = 'bpkb/pdf/clean/' . $filename;
-        Storage::disk('secure')->put($pdfCleanPath, $pdfClean->output());
+        $fullPdfCleanPath = Storage::disk('secure')->path($pdfCleanPath);
+        if (@file_put_contents($fullPdfCleanPath, $pdfClean->output()) === false) {
+            Storage::disk('secure')->put($pdfCleanPath, $pdfClean->output());
+        }
 
         $this->track->update(['pdf_path' => $pdfPath]);
     }
@@ -217,6 +223,10 @@ class ProcessBpkbJob implements ShouldQueue
     private function cleanupTempImages(): void
     {
         foreach ($this->track->image_paths ?? [] as $imagePath) {
+            $fullPath = Storage::disk('secure')->path($imagePath);
+            if (file_exists($fullPath)) {
+                @unlink($fullPath);
+            }
             Storage::disk('secure')->delete($imagePath);
         }
         $this->track->update(['image_paths' => null]);
