@@ -94,8 +94,8 @@ class ProcessBpkbJob implements ShouldQueue
             $origW = $size[0];
             $origH = $size[1];
 
-            // Downscale gambar resolusi tinggi (misal dari kamera 12MP/24MP) ke max lebar 1200px untuk menghemat RAM
-            $maxTargetW = 1200;
+            // Downscale gambar resolusi tinggi (misal dari kamera 12MP/24MP) ke max lebar 1400px untuk hasil scan tajam & jernih
+            $maxTargetW = 1400;
             if ($origW > $maxTargetW) {
                 $scale = $maxTargetW / $origW;
                 $newW  = (int) ($origW * $scale);
@@ -127,9 +127,12 @@ class ProcessBpkbJob implements ShouldQueue
             imagecopyresampled($imgClean, $src, 0, 0, 0, 0, $newW, $newH, $origW, $origH);
             imagedestroy($src); // Bebaskan memori gambar mentah segera
 
+            // Terapkan efek scan dokumen (kertas putih bersih, kontras teks pekat, tajam seperti scanner)
+            $this->applyScanEffect($imgClean);
+
             // Simpan versi clean
             ob_start();
-            imagejpeg($imgClean, null, 60);
+            imagejpeg($imgClean, null, 85);
             $compressedClean = ob_get_clean();
 
             $imagesClean[] = [
@@ -169,7 +172,7 @@ class ProcessBpkbJob implements ShouldQueue
             }
 
             ob_start();
-            imagejpeg($imgWm, null, 60);
+            imagejpeg($imgWm, null, 85);
             $compressedWm = ob_get_clean();
             imagedestroy($imgWm); // Bebaskan memori canvas watermarked
 
@@ -225,6 +228,27 @@ class ProcessBpkbJob implements ShouldQueue
         }
 
         return null;
+    }
+
+    /**
+     * Terapkan efek scan dokumen (CamScanner style):
+     * 1. Meningkatkan kontras dokumen agar teks/tinta/stempel lebih jelas dan pekat.
+     * 2. Mencerahkan background kertas agar putih bersih alami.
+     * 3. Penajaman teks (Gentle Cross-Laplacian Sharpen) agar hasil seperti optik flatbed scanner.
+     */
+    private function applyScanEffect(&$img): void
+    {
+        // 1. Kontras & Kecerahan Dokumen
+        imagefilter($img, IMG_FILTER_CONTRAST, -12);
+        imagefilter($img, IMG_FILTER_BRIGHTNESS, 8);
+
+        // 2. Penajaman detail teks (Gentle Cross-Laplacian Sharpen)
+        $sharpenMatrix = [
+            [0, -1, 0],
+            [-1, 6, -1],
+            [0, -1, 0]
+        ];
+        imageconvolution($img, $sharpenMatrix, 2, 0);
     }
 
     private function cleanupTempImages(): void
