@@ -11,13 +11,15 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('cache', function (Blueprint $table) {
+        \Illuminate\Support\Facades\DB::statement('CREATE SCHEMA IF NOT EXISTS aciax');
+
+        Schema::create('aciax.cache', function (Blueprint $table) {
             $table->string('key')->primary();
             $table->mediumText('value');
             $table->bigInteger('expiration')->index();
         });
 
-        Schema::create('cache_locks', function (Blueprint $table) {
+        Schema::create('aciax.cache_locks', function (Blueprint $table) {
             $table->string('key')->primary();
             $table->string('owner');
             $table->bigInteger('expiration')->index();
@@ -29,7 +31,9 @@ return new class extends Migration
      */
     public function down(): void
     {
+        Schema::dropIfExists('aciax.cache');
         Schema::dropIfExists('cache');
+        Schema::dropIfExists('aciax.cache_locks');
         Schema::dropIfExists('cache_locks');
     }
 };

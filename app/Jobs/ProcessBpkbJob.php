@@ -58,21 +58,17 @@ class ProcessBpkbJob implements ShouldQueue
         // Naikkan memory limit untuk proses pembuatan PDF dengan gambar
         ini_set('memory_limit', '512M');
 
-        // Skip if PDF already generated (idempotent retry)
-        if ($this->track->pdf_path && Storage::disk('secure')->exists($this->track->pdf_path)) {
-            return;
-        }
-
         $this->track->update(['stage' => 'create_pdf']);
         sleep(2);
 
         $imagePaths = $this->track->image_paths ?? [];
-        $images = [];
+        $imagesWm = [];
+        $imagesClean = [];
         $maxW = 0;
         $maxH = 0;
 
         foreach ($imagePaths as $imagePath) {
-            $tmp = Storage::disk('public')->path($imagePath);
+            $tmp = Storage::disk('secure')->path($imagePath);
             if (!file_exists($tmp)) {
                 continue;
             }
@@ -112,43 +108,116 @@ class ProcessBpkbJob implements ShouldQueue
                 continue;
             }
 
-            // Buat canvas baru sesuai ukuran yang sudah di-downscale
-            $img = imagecreatetruecolor($newW, $newH);
-            imagefill($img, 0, 0, imagecolorallocate($img, 255, 255, 255));
-            imagecopyresampled($img, $src, 0, 0, 0, 0, $newW, $newH, $origW, $origH);
+            // 1. Buat canvas bersih (Clean - tanpa watermark)
+            $imgClean = imagecreatetruecolor($newW, $newH);
+            imagefill($imgClean, 0, 0, imagecolorallocate($imgClean, 255, 255, 255));
+            imagecopyresampled($imgClean, $src, 0, 0, 0, 0, $newW, $newH, $origW, $origH);
             imagedestroy($src); // Bebaskan memori gambar mentah segera
 
+            // Simpan versi clean
             ob_start();
-            imagejpeg($img, null, 60);
-            $compressed = ob_get_clean();
-            imagedestroy($img); // Bebaskan memori canvas
+            imagejpeg($imgClean, null, 60);
+            $compressedClean = ob_get_clean();
 
-            $images[] = [
-                'base64' => base64_encode($compressed),
+            $imagesClean[] = [
+                'base64' => base64_encode($compressedClean),
                 'width'  => $pdfW,
                 'height' => $pdfH,
             ];
+            unset($compressedClean);
 
-            unset($compressed);
+            // 2. Buat canvas dengan watermark "Menara Agung" miring full persis seperti test_wm.png
+            $imgWm = imagecreatetruecolor($newW, $newH);
+            imagecopy($imgWm, $imgClean, 0, 0, 0, 0, $newW, $newH);
+            imagedestroy($imgClean); // Bebaskan memori clean canvas
+
+            $font = $this->getAvailableFont();
+            $fontSize = 13;
+            $angle = 30;
+            $color = imagecolorallocatealpha($imgWm, 70, 70, 70, 85);
+            $wmText = 'Menara Agung';
+
+            $stepX = 140;
+            $stepY = 80;
+
+            if ($font && function_exists('imagettftext')) {
+                for ($x = -150; $x < $newW + 200; $x += $stepX) {
+                    for ($y = -50; $y < $newH + 200; $y += $stepY) {
+                        @imagettftext($imgWm, $fontSize, $angle, $x, $y, $color, $font, $wmText);
+                    }
+                }
+            } else {
+                $textColor = imagecolorallocate($imgWm, 150, 150, 150);
+                for ($x = 20; $x < $newW; $x += $stepX) {
+                    for ($y = 20; $y < $newH; $y += $stepY) {
+                        @imagestring($imgWm, 3, $x, $y, $wmText, $textColor);
+                    }
+                }
+            }
+
+            ob_start();
+            imagejpeg($imgWm, null, 60);
+            $compressedWm = ob_get_clean();
+            imagedestroy($imgWm); // Bebaskan memori canvas watermarked
+
+            $imagesWm[] = [
+                'base64' => base64_encode($compressedWm),
+                'width'  => $pdfW,
+                'height' => $pdfH,
+            ];
+            unset($compressedWm);
         }
 
-        $pdf = Pdf::loadView('pdf.bpkb', [
-            'images'        => $images,
-            'namaKonsumen'  => $this->track->nama_konsumen,
-        ])->setPaper([0, 0, $maxW ?: 800, $maxH ?: 1100]);
-
+        $paperSize = [0, 0, $maxW ?: 800, $maxH ?: 1100];
         $sanitizedName = $this->track->nama_konsumen ? str_replace(['/', '\\'], '_', $this->track->nama_konsumen) : 'bpkb_' . $this->track->id;
         $filename = $sanitizedName . '.pdf';
+
+        // 1. Simpan PDF Versi Watermark (Default)
+        $pdfWm = Pdf::loadView('pdf.bpkb', [
+            'images'        => $imagesWm,
+            'namaKonsumen'  => $this->track->nama_konsumen,
+        ])->setPaper($paperSize);
+
         $pdfPath = 'bpkb/pdf/' . $filename;
-        Storage::disk('secure')->put($pdfPath, $pdf->output());
+        Storage::disk('secure')->put($pdfPath, $pdfWm->output());
+
+        // 2. Simpan PDF Versi Clean (Tanpa Watermark)
+        $pdfClean = Pdf::loadView('pdf.bpkb', [
+            'images'        => $imagesClean,
+            'namaKonsumen'  => $this->track->nama_konsumen,
+        ])->setPaper($paperSize);
+
+        $pdfCleanPath = 'bpkb/pdf/clean/' . $filename;
+        Storage::disk('secure')->put($pdfCleanPath, $pdfClean->output());
 
         $this->track->update(['pdf_path' => $pdfPath]);
+    }
+
+
+    private function getAvailableFont(): ?string
+    {
+        $candidateFonts = [
+            'C:/Windows/Fonts/arial.ttf',
+            'C:/Windows/Fonts/calibri.ttf',
+            'C:/Windows/Fonts/segoeui.ttf',
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+            '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+            '/usr/share/fonts/TTF/OpenSans.ttf',
+        ];
+
+        foreach ($candidateFonts as $font) {
+            if (file_exists($font)) {
+                return $font;
+            }
+        }
+
+        return null;
     }
 
     private function cleanupTempImages(): void
     {
         foreach ($this->track->image_paths ?? [] as $imagePath) {
-            Storage::disk('public')->delete($imagePath);
+            Storage::disk('secure')->delete($imagePath);
         }
         $this->track->update(['image_paths' => null]);
     }

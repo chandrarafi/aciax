@@ -25,7 +25,7 @@ class BpkbController extends Controller
 
         $imagePaths = [];
         foreach ($valid['images'] as $image) {
-            $path = $image->store('bpkb/temp', 'public');
+            $path = $image->store('bpkb/temp', 'secure');
             $imagePaths[] = $path;
         }
 
@@ -237,7 +237,196 @@ class BpkbController extends Controller
             abort(404, 'File PDF BPKB tidak ditemukan.');
         }
 
-        return Storage::disk('secure')->response($track->pdf_path);
+        $downloadName = ($track->nama_konsumen ?: $track->no_bpkb ?: 'bpkb_' . $track->id) . '.pdf';
+        return Storage::disk('secure')->response($track->pdf_path, $downloadName);
+    }
+
+    /**
+     * API untuk mengambil/download file BPKB PDF dari secure storage path.
+     * Mendukung pencarian berdasarkan:
+     * - Parameter {track} (UUID)
+     * - Query param track_id (UUID)
+     * - Query param nomesin (Nomor Mesin)
+     * - Query param nobpkb (Nomor BPKB)
+     * - Query param path / filename
+     */
+    public function getFile(Request $request, ?BpkbProcessTrack $track = null)
+    {
+        $targetTrack = ($track && $track->exists) ? $track : null;
+
+        // 1. Berdasarkan track_id di query/body jika model binding tidak ada
+        if (!$targetTrack && $request->filled('track_id')) {
+            $targetTrack = BpkbProcessTrack::find($request->input('track_id'));
+        }
+
+        // 2. Berdasarkan nomesin jika belum ketemu
+        if (!$targetTrack && $request->filled('nomesin')) {
+            $cleansedNoMesin = $this->cleansingNoMesin($request->input('nomesin'));
+            $targetTrack = BpkbProcessTrack::where('no_mesin', $cleansedNoMesin)
+                ->orderByRaw("CASE WHEN status = 'completed' THEN 1 WHEN status = 'processing' THEN 2 ELSE 3 END")
+                ->latest()
+                ->first();
+        }
+
+        // 3. Berdasarkan nobpkb jika belum ketemu
+        if (!$targetTrack && $request->filled('nobpkb')) {
+            $cleansedNoBpkb = $this->cleansingNoBpkb($request->input('nobpkb'));
+            $targetTrack = BpkbProcessTrack::where('no_bpkb', $cleansedNoBpkb)
+                ->orderByRaw("CASE WHEN status = 'completed' THEN 1 WHEN status = 'processing' THEN 2 ELSE 3 END")
+                ->latest()
+                ->first();
+        }
+
+        $filePath = null;
+        $downloadName = null;
+
+        if ($targetTrack) {
+            $filePath = $targetTrack->pdf_path;
+            $downloadName = ($targetTrack->nama_konsumen ?: $targetTrack->no_bpkb ?: 'bpkb_' . $targetTrack->id) . '.pdf';
+        }
+
+        // 4. Jika diberikan direct path atau filename
+        if (!$filePath && $request->filled('filename')) {
+            $filePath = 'bpkb/pdf/' . ltrim($request->input('filename'), '/\\');
+            $downloadName = basename($filePath);
+        } elseif (!$filePath && $request->filled('path')) {
+            $filePath = ltrim($request->input('path'), '/\\');
+            $downloadName = basename($filePath);
+        }
+
+        // Cek jika request meminta versi tanpa watermark (clean)
+        $wantClean = $request->boolean('without_wm') || $request->boolean('clean') || $request->query('watermark') === '0' || $request->query('watermark') === 'false';
+        if ($wantClean && $filePath) {
+            $cleanCandidate = 'bpkb/pdf/clean/' . basename($filePath);
+            if (Storage::disk('secure')->exists($cleanCandidate)) {
+                $filePath = $cleanCandidate;
+            }
+        }
+
+        // Jika targetTrack ditemukan tapi status belum selesai
+        if ($targetTrack && $targetTrack->status !== 'completed') {
+            $statusMessages = [
+                'queued'     => 'Proses BPKB masih dalam antrian. File PDF belum selesai di-generate.',
+                'processing' => 'Proses BPKB sedang berlangsung (tahap: ' . ($targetTrack->stage ?? 'proses') . '). Silakan coba beberapa saat lagi.',
+                'failed'     => 'Proses pembuatan BPKB gagal: ' . ($targetTrack->error_message ?? 'Terjadi kesalahan pada worker antrian.'),
+            ];
+
+            return response()->json([
+                'status'        => false,
+                'code'          => 'PROCESS_' . strtoupper($targetTrack->status),
+                'message'       => $statusMessages[$targetTrack->status] ?? 'File BPKB belum siap diunduh.',
+                'track_id'      => (string) $targetTrack->id,
+                'stage'         => $targetTrack->stage,
+                'track_status'  => $targetTrack->status,
+                'error_message' => $targetTrack->error_message,
+            ], 422);
+        }
+
+        // Resolusi lokasi file fisik (termasuk fallback jika path berbeda separator / direktori)
+        $resolvedDisk = null;
+        $normalizedPath = null;
+
+        if ($filePath) {
+            $normalizedPath = str_replace('\\', '/', ltrim($filePath, '/\\'));
+            
+            if (Storage::disk('secure')->exists($normalizedPath)) {
+                $resolvedDisk = 'secure';
+            } elseif (Storage::disk('local')->exists($normalizedPath)) {
+                $resolvedDisk = 'local';
+            } elseif (Storage::disk('public')->exists($normalizedPath)) {
+                $resolvedDisk = 'public';
+            }
+        }
+
+        // Jika file fisik tidak ditemukan
+        if (!$normalizedPath || !$resolvedDisk) {
+            return response()->json([
+                'status'        => false,
+                'code'          => 'FILE_NOT_FOUND',
+                'message'       => 'File BPKB tidak ditemukan pada storage path secure.',
+                'track_id'      => $targetTrack ? (string) $targetTrack->id : null,
+                'expected_path' => $filePath,
+                'storage_root'  => config('filesystems.disks.secure.root'),
+                'suggestion'    => $targetTrack ? 'Pastikan antrian queue worker (php artisan queue:work) telah berjalan dan file tersimpan di storage path.' : 'Periksa kembali parameter pencarian no_mesin, no_bpkb, atau track_id.',
+            ], 404);
+        }
+
+        $headers = [
+            'Content-Type' => Storage::disk($resolvedDisk)->mimeType($normalizedPath) ?: 'application/pdf',
+        ];
+
+        $disposition = $request->query('disposition', 'inline');
+        if ($disposition === 'attachment' || $request->boolean('download')) {
+            return Storage::disk($resolvedDisk)->download($normalizedPath, $downloadName, $headers);
+        }
+
+        return Storage::disk($resolvedDisk)->response($normalizedPath, $downloadName, $headers);
+    }
+
+    /**
+     * API untuk mengambil file BPKB PDF versi bersih (Tanpa Watermark / Remove Watermark).
+     */
+    public function getCleanFile(Request $request, ?BpkbProcessTrack $track = null)
+    {
+        $request->merge(['clean' => 1]);
+        return $this->getFile($request, $track);
+    }
+
+    /**
+     * API untuk mengambil metadata / informasi data BPKB dari storage path.
+     */
+    public function getFileInfo(Request $request, ?BpkbProcessTrack $track = null): JsonResponse
+    {
+        $targetTrack = ($track && $track->exists) ? $track : null;
+
+        if (!$targetTrack && $request->filled('track_id')) {
+            $targetTrack = BpkbProcessTrack::find($request->input('track_id'));
+        }
+
+        if (!$targetTrack && $request->filled('nomesin')) {
+            $cleansed = $this->cleansingNoMesin($request->input('nomesin'));
+            $targetTrack = BpkbProcessTrack::where('no_mesin', $cleansed)->latest()->first();
+        }
+
+        if (!$targetTrack && $request->filled('nobpkb')) {
+            $cleansed = $this->cleansingNoBpkb($request->input('nobpkb'));
+            $targetTrack = BpkbProcessTrack::where('no_bpkb', $cleansed)->latest()->first();
+        }
+
+        if (!$targetTrack) {
+            return response()->json([
+                'status'  => false,
+                'code'    => 'TRACK_NOT_FOUND',
+                'message' => 'Data tracking BPKB tidak ditemukan pada database.',
+            ], 404);
+        }
+
+        $normalizedPath = $targetTrack->pdf_path ? str_replace('\\', '/', ltrim($targetTrack->pdf_path, '/\\')) : null;
+        $fileExists = $normalizedPath && (Storage::disk('secure')->exists($normalizedPath) || Storage::disk('local')->exists($normalizedPath) || Storage::disk('public')->exists($normalizedPath));
+        $resolvedDisk = $fileExists ? (Storage::disk('secure')->exists($normalizedPath) ? 'secure' : (Storage::disk('local')->exists($normalizedPath) ? 'local' : 'public')) : null;
+
+        $fileSizeBytes = ($fileExists && $resolvedDisk) ? Storage::disk($resolvedDisk)->size($normalizedPath) : 0;
+        $lastModified = ($fileExists && $resolvedDisk) ? date('Y-m-d H:i:s', Storage::disk($resolvedDisk)->lastModified($normalizedPath)) : null;
+
+        return response()->json([
+            'status' => true,
+            'data'   => [
+                'track_id'             => $targetTrack->id,
+                'no_mesin'             => $targetTrack->no_mesin,
+                'no_bpkb'              => $targetTrack->no_bpkb,
+                'nama_konsumen'        => $targetTrack->nama_konsumen,
+                'stage'                => $targetTrack->stage,
+                'status'               => $targetTrack->status,
+                'error_message'        => $targetTrack->error_message,
+                'pdf_path'             => $targetTrack->pdf_path,
+                'file_saved_on_server' => $fileExists,
+                'file_size_bytes'      => $fileSizeBytes,
+                'file_size_formatted'  => $fileExists ? $this->formatBytes($fileSizeBytes) : null,
+                'last_modified'        => $lastModified,
+                'file_url'             => $fileExists ? url('/api/bpkb/file/' . $targetTrack->id) : null,
+                'download_url'         => $fileExists ? url('/api/bpkb/file/' . $targetTrack->id . '?disposition=attachment') : null,
+            ]
+        ]);
     }
 
     public function activity(): JsonResponse
@@ -294,5 +483,140 @@ class BpkbController extends Controller
         });
 
         return response()->json($data);
+    }
+
+    /**
+     * API Monitoring BPKB yang sudah diproses dan tersimpan di secure storage server.
+     * 
+     * Filter yang didukung:
+     * - search: mencari di no_mesin, no_bpkb, nama_konsumen, atau track_id
+     * - status: completed, processing, queued, failed
+     * - stage: create_pdf, update_stok_unit, update_tgl_bpkb_siap, completed
+     * - date: YYYY-MM-DD
+     * - start_date & end_date: YYYY-MM-DD
+     * - month: YYYY-MM
+     * - has_file: true/false (hanya yang memiliki file PDF di server)
+     * - per_page: jumlah data per halaman (default: 15, max: 100)
+     * - page: nomor halaman
+     * - sort_by: created_at, updated_at, nama_konsumen, no_mesin, no_bpkb (default: created_at)
+     * - sort_direction: asc / desc (default: desc)
+     */
+    public function monitoring(Request $request): JsonResponse
+    {
+        $query = BpkbProcessTrack::query();
+
+        // Search
+        if ($request->filled('search')) {
+            $search = trim($request->input('search'));
+            $query->where(function ($q) use ($search) {
+                $q->where('no_mesin', 'like', "%{$search}%")
+                  ->orWhere('no_bpkb', 'like', "%{$search}%")
+                  ->orWhere('nama_konsumen', 'like', "%{$search}%")
+                  ->orWhere('id', 'like', "%{$search}%");
+            });
+        }
+
+        // Filter status
+        if ($request->filled('status')) {
+            $query->where('status', $request->input('status'));
+        }
+
+        // Filter stage
+        if ($request->filled('stage')) {
+            $query->where('stage', $request->input('stage'));
+        }
+
+        // Filter tanggal spesifik
+        if ($request->filled('date')) {
+            $query->whereDate('created_at', $request->input('date'));
+        }
+
+        // Filter range tanggal
+        if ($request->filled('start_date')) {
+            $query->whereDate('created_at', '>=', $request->input('start_date'));
+        }
+        if ($request->filled('end_date')) {
+            $query->whereDate('created_at', '<=', $request->input('end_date'));
+        }
+
+        // Filter bulan (format: YYYY-MM)
+        if ($request->filled('month')) {
+            $query->where('created_at', 'like', $request->input('month') . '%');
+        }
+
+        // Filter hanya yang memiliki file PDF
+        if ($request->boolean('has_file')) {
+            $query->whereNotNull('pdf_path');
+        }
+
+        // Ringkasan statistik (Stats)
+        $stats = [
+            'total_all'        => (clone $query)->count(),
+            'total_completed'  => (clone $query)->where('status', 'completed')->count(),
+            'total_processing' => (clone $query)->where('status', 'processing')->count(),
+            'total_queued'     => (clone $query)->where('status', 'queued')->count(),
+            'total_failed'     => (clone $query)->where('status', 'failed')->count(),
+            'total_with_pdf'   => (clone $query)->whereNotNull('pdf_path')->count(),
+        ];
+
+        // Sorting
+        $allowedSort = ['created_at', 'updated_at', 'nama_konsumen', 'no_mesin', 'no_bpkb'];
+        $sortBy = in_array($request->query('sort_by'), $allowedSort) ? $request->query('sort_by') : 'created_at';
+        $sortDir = strtolower($request->query('sort_direction', 'desc')) === 'asc' ? 'asc' : 'desc';
+        $query->orderBy($sortBy, $sortDir);
+
+        // Pagination
+        $perPage = max(1, min((int) $request->query('per_page', 15), 100));
+        $paginator = $query->paginate($perPage);
+
+        $items = collect($paginator->items())->map(function (BpkbProcessTrack $track) {
+            $fileExists = $track->pdf_path && Storage::disk('secure')->exists($track->pdf_path);
+            $fileSizeBytes = $fileExists ? Storage::disk('secure')->size($track->pdf_path) : 0;
+            $fileSizeFormatted = $fileExists ? $this->formatBytes($fileSizeBytes) : null;
+            $lastModified = $fileExists ? date('Y-m-d H:i:s', Storage::disk('secure')->lastModified($track->pdf_path)) : null;
+
+            return [
+                'track_id'             => (string) $track->id,
+                'no_mesin'             => (string) $track->no_mesin,
+                'no_bpkb'              => (string) $track->no_bpkb,
+                'nama_konsumen'        => $track->nama_konsumen,
+                'stage'                => $track->stage,
+                'status'               => $track->status,
+                'error_message'        => $track->error_message,
+                'pdf_path'             => $track->pdf_path,
+                'file_saved_on_server' => $fileExists,
+                'file_size_bytes'      => $fileSizeBytes,
+                'file_size_formatted'  => $fileSizeFormatted,
+                'file_last_modified'   => $lastModified,
+                'file_url'             => $fileExists ? url('/api/bpkb/file/' . $track->id) : null,
+                'download_url'         => $fileExists ? url('/api/bpkb/file/' . $track->id . '?disposition=attachment') : null,
+                'created_at'           => $track->created_at ? (is_string($track->created_at) ? $track->created_at : $track->created_at->format('Y-m-d H:i:s')) : null,
+                'updated_at'           => $track->updated_at ? (is_string($track->updated_at) ? $track->updated_at : $track->updated_at->format('Y-m-d H:i:s')) : null,
+            ];
+        });
+
+        return response()->json([
+            'status'     => true,
+            'stats'      => $stats,
+            'pagination' => [
+                'total'        => $paginator->total(),
+                'per_page'     => $paginator->perPage(),
+                'current_page' => $paginator->currentPage(),
+                'last_page'    => $paginator->lastPage(),
+                'from'         => $paginator->firstItem(),
+                'to'           => $paginator->lastItem(),
+            ],
+            'data'       => $items,
+        ]);
+    }
+
+    private function formatBytes(int $bytes, int $precision = 2): string
+    {
+        $units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        $bytes = max($bytes, 0);
+        $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
+        $pow = min($pow, count($units) - 1);
+        $bytes /= (1 << (10 * $pow));
+        return round($bytes, $precision) . ' ' . $units[$pow];
     }
 }
