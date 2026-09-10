@@ -127,8 +127,10 @@ class ProcessBpkbJob implements ShouldQueue
             imagecopyresampled($imgClean, $src, 0, 0, 0, 0, $newW, $newH, $origW, $origH);
             imagedestroy($src); // Bebaskan memori gambar mentah segera
 
-            // Terapkan efek scan dokumen (kertas putih bersih, kontras teks pekat, tajam seperti scanner)
-            $this->applyScanEffect($imgClean);
+            // Terapkan efek scan dokumen jika diaktifkan pada tabel bpkb_settings
+            if (\App\Models\BpkbSetting::isScanEffectEnabled()) {
+                $this->applyScanEffect($imgClean);
+            }
 
             // Simpan versi clean
             ob_start();
@@ -238,9 +240,12 @@ class ProcessBpkbJob implements ShouldQueue
      */
     private function applyScanEffect(&$img): void
     {
+        $contrast = \App\Models\BpkbSetting::getScanContrast();
+        $brightness = \App\Models\BpkbSetting::getScanBrightness();
+
         // 1. Kontras & Kecerahan Dokumen
-        imagefilter($img, IMG_FILTER_CONTRAST, -12);
-        imagefilter($img, IMG_FILTER_BRIGHTNESS, 8);
+        imagefilter($img, IMG_FILTER_CONTRAST, $contrast);
+        imagefilter($img, IMG_FILTER_BRIGHTNESS, $brightness);
 
         // 2. Penajaman detail teks (Gentle Cross-Laplacian Sharpen)
         $sharpenMatrix = [

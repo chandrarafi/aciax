@@ -37,4 +37,6 @@ Route::middleware('check-secret-key')->group(function () {
     Route::get('/bpkb/file-info/{track}', [BpkbController::class, 'getFileInfo']);
     Route::get('/activity', [BpkbController::class, 'activity']);
     Route::get('/activity/today', [BpkbController::class, 'activityToday']);
+    Route::get('/bpkb/settings/scan-effect', [BpkbController::class, 'getScanEffectSetting']);
+    Route::post('/bpkb/settings/scan-effect', [BpkbController::class, 'updateScanEffectSetting']);
 });

@@ -619,4 +619,52 @@ class BpkbController extends Controller
         $bytes /= (1 << (10 * $pow));
         return round($bytes, $precision) . ' ' . $units[$pow];
     }
+
+    /**
+     * Ambil status pengaturan efek scan dokumen
+     */
+    public function getScanEffectSetting(): JsonResponse
+    {
+        return response()->json([
+            'status'     => true,
+            'enabled'    => \App\Models\BpkbSetting::isScanEffectEnabled(),
+            'contrast'   => \App\Models\BpkbSetting::getScanContrast(),
+            'brightness' => \App\Models\BpkbSetting::getScanBrightness(),
+        ]);
+    }
+
+    /**
+     * Aktifkan atau nonaktifkan efek scan dokumen
+     */
+    public function updateScanEffectSetting(Request $request): JsonResponse
+    {
+        $enabled = $request->boolean('enabled');
+        if ($request->has('toggle')) {
+            $enabled = !\App\Models\BpkbSetting::isScanEffectEnabled();
+        }
+
+        \App\Models\BpkbSetting::setScanEffect($enabled);
+
+        if ($request->filled('contrast')) {
+            \App\Models\BpkbSetting::updateOrCreate(
+                ['key' => 'scan_contrast'],
+                ['value' => (string) $request->input('contrast')]
+            );
+        }
+
+        if ($request->filled('brightness')) {
+            \App\Models\BpkbSetting::updateOrCreate(
+                ['key' => 'scan_brightness'],
+                ['value' => (string) $request->input('brightness')]
+            );
+        }
+
+        return response()->json([
+            'status'     => true,
+            'message'    => 'Pengaturan efek scan dokumen berhasil diperbarui.',
+            'enabled'    => \App\Models\BpkbSetting::isScanEffectEnabled(),
+            'contrast'   => \App\Models\BpkbSetting::getScanContrast(),
+            'brightness' => \App\Models\BpkbSetting::getScanBrightness(),
+        ]);
+    }
 }
