@@ -198,6 +198,7 @@ class ProcessBpkbJob implements ShouldQueue
 
         $pdfPath = 'bpkb/pdf/' . $filename;
         Storage::disk('secure')->put($pdfPath, $pdfWm->output());
+        @chmod(Storage::disk('secure')->path($pdfPath), 0664);
 
         // 2. Simpan PDF Versi Clean (Tanpa Watermark)
         $pdfClean = Pdf::loadView('pdf.bpkb', [
@@ -207,6 +208,7 @@ class ProcessBpkbJob implements ShouldQueue
 
         $pdfCleanPath = 'bpkb/pdf/clean/' . $filename;
         Storage::disk('secure')->put($pdfCleanPath, $pdfClean->output());
+        @chmod(Storage::disk('secure')->path($pdfCleanPath), 0664);
 
         $this->track->update(['pdf_path' => $pdfPath]);
     }

@@ -64,6 +64,16 @@ return [
             'driver' => 'local',
             'root' => env('SECURE_STORAGE_PATH', storage_path('app/secure')),
             'visibility' => 'private',
+            'permissions' => [
+                'file' => [
+                    'public' => 0664,
+                    'private' => 0664,
+                ],
+                'dir' => [
+                    'public' => 0775,
+                    'private' => 0775,
+                ],
+            ],
             'throw' => false,
         ],
 

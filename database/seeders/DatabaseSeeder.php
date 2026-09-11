@@ -35,5 +35,8 @@ class DatabaseSeeder extends Seeder
 
         // Create 10 random users
         User::factory(10)->create();
+
+        // Seed dummy BPKB process tracks without PDF
+        $this->call(BpkbDummySeeder::class);
     }
 }

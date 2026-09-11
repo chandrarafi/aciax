@@ -231,14 +231,10 @@ class BpkbController extends Controller
         ]);
     }
 
-    public function download(BpkbProcessTrack $track)
+    public function download(Request $request, BpkbProcessTrack $track)
     {
-        if (!$track->pdf_path || !Storage::disk('secure')->exists($track->pdf_path)) {
-            abort(404, 'File PDF BPKB tidak ditemukan.');
-        }
-
-        $downloadName = ($track->nama_konsumen ?: $track->no_bpkb ?: 'bpkb_' . $track->id) . '.pdf';
-        return Storage::disk('secure')->response($track->pdf_path, $downloadName);
+        $request->merge(['disposition' => 'attachment']);
+        return $this->getFile($request, $track);
     }
 
     /**
@@ -351,17 +347,60 @@ class BpkbController extends Controller
             ], 404);
         }
 
+        $fullPath = Storage::disk($resolvedDisk)->path($normalizedPath);
+
+        if (!file_exists($fullPath) || !is_file($fullPath)) {
+            return response()->json([
+                'status'        => false,
+                'code'          => 'FILE_NOT_FOUND',
+                'message'       => 'File BPKB tidak ditemukan pada storage path disk ' . $resolvedDisk . '.',
+                'track_id'      => $targetTrack ? (string) $targetTrack->id : null,
+                'expected_path' => $filePath,
+                'full_path'     => $fullPath,
+            ], 404);
+        }
+
+        // Coba perbaiki permission jika file belum readable oleh web server
+        if (!is_readable($fullPath)) {
+            @chmod($fullPath, 0664);
+            clearstatcache(true, $fullPath);
+        }
+
+        if (!is_readable($fullPath)) {
+            return response()->json([
+                'status'        => false,
+                'code'          => 'FILE_PERMISSION_DENIED',
+                'message'       => 'File BPKB ditemukan di server tetapi tidak memiliki izin baca (permission denied) oleh web server.',
+                'track_id'      => $targetTrack ? (string) $targetTrack->id : null,
+                'file_path'     => $fullPath,
+                'suggestion'    => 'Jalankan perintah chmod 664 atau chown www-data:www-data pada file/direktori storage di server.',
+            ], 500);
+        }
+
+        if (filesize($fullPath) === 0) {
+            return response()->json([
+                'status'        => false,
+                'code'          => 'FILE_EMPTY',
+                'message'       => 'File BPKB ditemukan tetapi ukurannya 0 byte (kosong). Silakan proses ulang dokumen.',
+                'track_id'      => $targetTrack ? (string) $targetTrack->id : null,
+                'file_path'     => $fullPath,
+            ], 422);
+        }
+
+        $mimeType = Storage::disk($resolvedDisk)->mimeType($normalizedPath) ?: 'application/pdf';
         $headers = [
-            'Content-Type' => Storage::disk($resolvedDisk)->mimeType($normalizedPath) ?: 'application/pdf',
+            'Content-Type'   => $mimeType,
+            'Content-Length' => (string) filesize($fullPath),
         ];
 
         $disposition = $request->query('disposition', 'inline');
         if ($disposition === 'attachment' || $request->boolean('download')) {
-            return Storage::disk($resolvedDisk)->download($normalizedPath, $downloadName, $headers);
+            return response()->download($fullPath, $downloadName, $headers);
         }
 
-        return Storage::disk($resolvedDisk)->response($normalizedPath, $downloadName, $headers);
+        return response()->file($fullPath, $headers);
     }
+
 
     /**
      * API untuk mengambil file BPKB PDF versi bersih (Tanpa Watermark / Remove Watermark).
