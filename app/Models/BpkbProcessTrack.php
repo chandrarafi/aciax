@@ -20,6 +20,7 @@ class BpkbProcessTrack extends Model
         'stage',
         'status',
         'error_message',
+        'akurasi',
     ];
 
     protected function casts(): array

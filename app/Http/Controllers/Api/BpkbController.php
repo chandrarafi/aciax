@@ -20,7 +20,9 @@ class BpkbController extends Controller
         $valid = $request->validated();
 
         // Perform cleansing on requested no_mesin and no_bpkb
-        $cleansedNoMesin = $this->cleansingNoMesin($valid['nomesin']);
+        $cleansingMesin  = $this->cleansingNoMesinWithDetails($valid['nomesin']);
+        $cleansedNoMesin = $cleansingMesin['cleansed'];
+        $akurasi         = $cleansingMesin['overall_accuracy_pct'] . '%';
         $cleansedNoBpkb  = $this->cleansingNoBpkb($valid['nobpkb']);
 
         $imagePaths = [];
@@ -40,6 +42,7 @@ class BpkbController extends Controller
             'image_paths'    => $imagePaths,
             'stage'          => 'pending',
             'status'         => 'queued',
+            'akurasi'        => $akurasi,
         ]);
 
         ProcessBpkbJob::dispatch($track);
@@ -535,6 +538,7 @@ class BpkbController extends Controller
                 'stage'                => $targetTrack->stage,
                 'status'               => $targetTrack->status,
                 'error_message'        => $targetTrack->error_message,
+                'akurasi'              => $targetTrack->akurasi,
                 'pdf_path'             => $targetTrack->pdf_path,
                 'file_saved_on_server' => $fileExists,
                 'file_size_bytes'      => $fileSizeBytes,
@@ -700,6 +704,7 @@ class BpkbController extends Controller
                 'stage'                => $track->stage,
                 'status'               => $track->status,
                 'error_message'        => $track->error_message,
+                'akurasi'              => $track->akurasi,
                 'pdf_path'             => $track->pdf_path,
                 'file_saved_on_server' => $fileExists,
                 'file_size_bytes'      => $fileSizeBytes,

@@ -213,6 +213,7 @@ Melihat status dan tahapan pengerjaan BPKB satu kali (metode polling).
       "stage": "completed",
       "status": "completed",
       "error_message": null,
+      "akurasi": "100%",
       "created_at": "2026-10-19T08:10:00.000000Z",
       "updated_at": "2026-10-19T08:10:15.000000Z"
   }
@@ -311,6 +312,7 @@ Mengecek status ketersediaan fisik file di server, ukuran byte, format ukuran ma
           "stage": "completed",
           "status": "completed",
           "error_message": null,
+          "akurasi": "100%",
           "pdf_path": "bpkb/pdf/BUDI SANTOSO.pdf",
           "file_saved_on_server": true,
           "file_size_bytes": 1048576,
@@ -453,6 +455,7 @@ Mengambil data riwayat pemrosesan BPKB yang tersimpan di sistem, lengkap dengan 
               "stage": "completed",
               "status": "completed",
               "error_message": null,
+              "akurasi": "100%",
               "pdf_path": "bpkb/pdf/BUDI SANTOSO.pdf",
               "file_saved_on_server": true,
               "file_size_bytes": 984520,

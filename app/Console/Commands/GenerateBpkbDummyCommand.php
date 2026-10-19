@@ -83,6 +83,7 @@ class GenerateBpkbDummyCommand extends Command
             $st = $statuses[array_rand($statuses)];
             $name = $names[$i % count($names)];
             $createdAt = Carbon::now()->subHours(rand(0, 72))->subMinutes(rand(0, 59));
+            $akurasi = rand(90, 100) . '%';
 
             BpkbProcessTrack::create([
                 'id'            => (string) Str::uuid(),
@@ -94,6 +95,7 @@ class GenerateBpkbDummyCommand extends Command
                 'stage'         => $st['stage'],
                 'status'        => $st['status'],
                 'error_message' => $st['error'],
+                'akurasi'       => $akurasi,
                 'created_at'    => $createdAt,
                 'updated_at'    => $createdAt,
             ]);
