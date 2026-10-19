@@ -69,4 +69,35 @@ class BpkbSetting extends Model
             ]
         );
     }
+
+    /**
+     * Ambil kualitas kompresi PDF (persen 10 - 100%, default: 72%)
+     */
+    public static function getPdfCompressQuality(): int
+    {
+        try {
+            $val = static::where('key', 'pdf_compress_quality')->value('value');
+            if ($val !== null && is_numeric($val)) {
+                return max(10, min(100, (int) $val));
+            }
+            return (int) env('BPKB_COMPRESS_QUALITY', 72);
+        } catch (\Throwable $e) {
+            return 72;
+        }
+    }
+
+    /**
+     * Simpan kualitas kompresi PDF (persen 10 - 100%)
+     */
+    public static function setPdfCompressQuality(int $quality): void
+    {
+        $clamped = max(10, min(100, $quality));
+        static::updateOrCreate(
+            ['key' => 'pdf_compress_quality'],
+            [
+                'value'       => (string) $clamped,
+                'description' => 'Tingkat persentase kualitas kompresi PDF BPKB (10 - 100%, default: 72)',
+            ]
+        );
+    }
 }

@@ -112,6 +112,8 @@ Jika secret key tidak valid atau tidak disertakan, server akan merespon:
 | `GET` | `/api/activity/today` | `check-secret-key` | Statistik harian: jumlah tercapai vs target hari ini. |
 | `GET` | `/api/bpkb/settings/scan-effect` | `check-secret-key` | Ambil konfigurasi efek scanner (kontras & kecerahan). |
 | `POST` | `/api/bpkb/settings/scan-effect` | `check-secret-key` | Perbarui konfigurasi efek scanner (toggle on/off, set nilai). |
+| `GET` | `/api/bpkb/settings/compress` | `check-secret-key` | Ambil konfigurasi persen kualitas kompresi PDF saat ini. |
+| `POST` | `/api/bpkb/settings/compress` | `check-secret-key` | Perbarui persen kualitas kompresi PDF (10% - 100%). |
 | `GET` | `/api/user` | `auth:sanctum` | Mengambil data pengguna yang login via token Sanctum. |
 | `GET` | `/bpkb/download/{track}` | Web | Direct download attachment PDF BPKB. |
 
@@ -558,6 +560,51 @@ Mengubah konfigurasi efek scan gambar.
       "enabled": true,
       "contrast": -20,
       "brightness": 25
+  }
+  ```
+
+---
+
+#### `GET /api/bpkb/settings/compress`
+Melihat persentase kualitas kompresi gambar PDF BPKB saat ini.
+
+* **Headers:** `SECRET-KEY: <key>`
+* **Respon Sukses (200 OK):**
+  ```json
+  {
+      "status": true,
+      "quality": 72,
+      "quality_percent": "72%",
+      "max_target_width": 1000,
+      "description": "Kualitas kompresi gambar PDF BPKB (10% - 100%). Nilai lebih kecil menghasilkan file lebih ringan."
+  }
+  ```
+
+---
+
+#### `POST /api/bpkb/settings/compress`
+Mengubah persentase kualitas kompresi gambar PDF BPKB. Nilai yang lebih kecil menghasilkan ukuran file PDF yang lebih kecil/ringan.
+
+* **Headers:** `SECRET-KEY: <key>`
+* **Body Parameters (JSON / Form):**
+  | Parameter | Tipe | Wajib | Keterangan |
+  |---|---|---|---|
+  | `quality` / `persen` / `percent` | integer | Ya | Angka persentase kualitas kompresi (`10` s/d `100`). Rekomendasi: `65` - `75` untuk hasil di bawah 1MB. |
+
+* **Contoh Request Body:**
+  ```json
+  {
+      "persen": 70
+  }
+  ```
+
+* **Respon Sukses (200 OK):**
+  ```json
+  {
+      "status": true,
+      "message": "Pengaturan persen kompresi PDF berhasil disimpan.",
+      "quality": 70,
+      "quality_percent": "70%"
   }
   ```
 

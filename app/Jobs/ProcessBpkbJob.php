@@ -72,6 +72,8 @@ class ProcessBpkbJob implements ShouldQueue
         $this->track->update(['stage' => 'create_pdf']);
         sleep(2);
 
+        $compressQuality = \App\Models\BpkbSetting::getPdfCompressQuality();
+
         $imagesWm = [];
         $imagesClean = [];
         $maxW = 0;
@@ -143,7 +145,7 @@ class ProcessBpkbJob implements ShouldQueue
             }
 
             // Simpan versi clean terkompresi adaptif (< 220KB per halaman agar total 4 halaman < 1MB)
-            $compressedClean = $this->compressJpegWithQuality($imgClean, 72, 220000);
+            $compressedClean = $this->compressJpegWithQuality($imgClean, $compressQuality, 220000);
 
             $imagesClean[] = [
                 'base64' => base64_encode($compressedClean),
@@ -182,7 +184,7 @@ class ProcessBpkbJob implements ShouldQueue
             }
 
             // Simpan versi watermarked terkompresi adaptif (< 220KB per halaman agar total 4 halaman < 1MB)
-            $compressedWm = $this->compressJpegWithQuality($imgWm, 72, 220000);
+            $compressedWm = $this->compressJpegWithQuality($imgWm, $compressQuality, 220000);
             imagedestroy($imgWm); // Bebaskan memori canvas watermarked
 
             $imagesWm[] = [

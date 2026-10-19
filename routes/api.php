@@ -49,6 +49,8 @@ Route::middleware('check-secret-key')->group(function () {
     Route::get('/activity/today', [BpkbController::class, 'activityToday']);
     Route::get('/bpkb/settings/scan-effect', [BpkbController::class, 'getScanEffectSetting']);
     Route::post('/bpkb/settings/scan-effect', [BpkbController::class, 'updateScanEffectSetting']);
+    Route::get('/bpkb/settings/compress', [BpkbController::class, 'getCompressSetting']);
+    Route::post('/bpkb/settings/compress', [BpkbController::class, 'updateCompressSetting']);
     Route::post('/bpkb/retry', [BpkbController::class, 'retry']);
     Route::post('/bpkb/retry/{track}', [BpkbController::class, 'retry']);
     Route::post('/bpkb/retry-all-failed', [BpkbController::class, 'retryAllFailed']);

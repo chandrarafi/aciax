@@ -791,6 +791,59 @@ class BpkbController extends Controller
     }
 
     /**
+     * Ambil status persentase / kualitas kompresi PDF
+     */
+    public function getCompressSetting(): JsonResponse
+    {
+        $quality = \App\Models\BpkbSetting::getPdfCompressQuality();
+
+        return response()->json([
+            'status'           => true,
+            'quality'          => $quality,
+            'quality_percent'  => $quality . '%',
+            'max_target_width' => 1000,
+            'description'      => 'Kualitas kompresi gambar PDF BPKB (10% - 100%). Nilai lebih kecil menghasilkan file lebih ringan.',
+        ]);
+    }
+
+    /**
+     * Perbarui persentase / kualitas kompresi PDF
+     */
+    public function updateCompressSetting(Request $request): JsonResponse
+    {
+        // Fleksibel menerima input: quality, percent, persen, compression, nilai
+        $inputVal = $request->input('quality')
+            ?? $request->input('percent')
+            ?? $request->input('persen')
+            ?? $request->input('compression')
+            ?? $request->input('nilai');
+
+        if ($inputVal === null || !is_numeric($inputVal)) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Parameter persen kompresi (quality / persen) wajib diisi dengan angka 10 - 100.',
+            ], 422);
+        }
+
+        $quality = (int) $inputVal;
+        if ($quality < 10 || $quality > 100) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Nilai persen kompresi harus berada dalam rentang 10 sampai 100.',
+            ], 422);
+        }
+
+        \App\Models\BpkbSetting::setPdfCompressQuality($quality);
+
+        return response()->json([
+            'status'          => true,
+            'message'         => 'Pengaturan persen kompresi PDF berhasil disimpan.',
+            'quality'         => $quality,
+            'quality_percent' => $quality . '%',
+        ]);
+    }
+
+    /**
      * Mengulang (retry) proses BPKB yang gagal.
      * Mendukung pencarian berdasarkan:
      * - Route parameter {track} (UUID)
