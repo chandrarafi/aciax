@@ -58,10 +58,20 @@ class ProcessBpkbJob implements ShouldQueue
         // Naikkan memory limit untuk proses pembuatan PDF dengan gambar
         ini_set('memory_limit', '512M');
 
+        $imagePaths = $this->track->image_paths ?? [];
+
+        // Jika PDF sudah ada dan file fisik valid di disk secure (misal saat retry setelah gagal di update_stok_unit), gunakan PDF yang sudah ada
+        if (empty($imagePaths) && $this->track->pdf_path && Storage::disk('secure')->exists($this->track->pdf_path)) {
+            return;
+        }
+
+        if (empty($imagePaths)) {
+            throw new \Exception("File gambar BPKB tidak ditemukan pada storage untuk memproses PDF.");
+        }
+
         $this->track->update(['stage' => 'create_pdf']);
         sleep(2);
 
-        $imagePaths = $this->track->image_paths ?? [];
         $imagesWm = [];
         $imagesClean = [];
         $maxW = 0;

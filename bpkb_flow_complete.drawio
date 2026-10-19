@@ -1,0 +1,252 @@
+<mxfile host="app.diagrams.net" modified="2026-10-14T08:55:00.000Z" agent="Antigravity" version="21.0.0" type="device">
+  <diagram id="bpkb-flow-complete" name="Business Flow API BPKB">
+    <mxGraphModel dx="1600" dy="1050" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        
+        <!-- POOL UTAMA -->
+        <mxCell id="pool" value="ALUR PROSES BISNIS SISTEM BPKB" style="swimlane;html=1;childLayout=stackLayout;resizeParent=1;resizeParentMax=0;startSize=30;horizontal=0;horizontalStack=1;fillColor=#F8F9FA;strokeColor=#37474F;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="40" y="30" width="1440" height="1060" as="geometry" />
+        </mxCell>
+
+        <!-- LANE 1: CLIENT -->
+        <mxCell id="lane1" value="CLIENT / CABANG DEALER" style="swimlane;html=1;startSize=30;fillColor=#E1F5FE;strokeColor=#0288D1;fontStyle=1;fontSize=11;strokeWidth=1.5;" vertex="1" parent="pool">
+          <mxGeometry x="30" y="0" width="280" height="1060" as="geometry" />
+        </mxCell>
+        <mxCell id="n_start_mesin" value="1. Input / Scan&#xa;Nomor Mesin" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0288D1;strokeWidth=1.5;fontStyle=1;" vertex="1" parent="lane1">
+          <mxGeometry x="45" y="50" width="190" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="n_req_dealer" value="Kirim Request GET&#xa;/get-dealer?nomesin=..." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0288D1;strokeWidth=1.5;" vertex="1" parent="lane1">
+          <mxGeometry x="45" y="125" width="190" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="n_show_dealer" value="Tampilkan Info Dealer &amp;&#xa;Bentuk Penjualan (Cash/Kredit)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0288D1;strokeWidth=1.5;" vertex="1" parent="lane1">
+          <mxGeometry x="45" y="200" width="190" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n_input_bpkb" value="2. Verifikasi OK: Input No BPKB&#xa;&amp; Upload 4 Foto Fisik BPKB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0288D1;strokeWidth=1.5;fontStyle=1;" vertex="1" parent="lane1">
+          <mxGeometry x="45" y="280" width="190" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="n_send_process" value="3. Kirim Request POST&#xa;/api/bpkb/process" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0288D1;strokeWidth=1.5;" vertex="1" parent="lane1">
+          <mxGeometry x="45" y="365" width="190" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n_recv_ticket" value="Terima Tiket Antrean&#xa;202 Accepted (Track ID)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0288D1;strokeWidth=1.5;" vertex="1" parent="lane1">
+          <mxGeometry x="45" y="575" width="190" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n_track" value="Pantau Status Proses&#xa;(SSE / Stream API)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0288D1;strokeWidth=1.5;" vertex="1" parent="lane1">
+          <mxGeometry x="45" y="660" width="190" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n_download" value="Unduh / Cetak Dokumen&#xa;PDF BPKB (Resmi / Bersih)" style="shape=document;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#FCE4EC;strokeColor=#C2185B;strokeWidth=1.5;fontStyle=1;" vertex="1" parent="lane1">
+          <mxGeometry x="45" y="910" width="190" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- LANE 2: GATEWAY -->
+        <mxCell id="lane2" value="GATEWAY &amp; DATA CLEANING" style="swimlane;html=1;startSize=30;fillColor=#FFF8E1;strokeColor=#FFA000;fontStyle=1;fontSize=11;strokeWidth=1.5;" vertex="1" parent="pool">
+          <mxGeometry x="310" y="0" width="290" height="1060" as="geometry" />
+        </mxCell>
+        <mxCell id="n_api_dealer" value="Endpoint: GET /get-dealer&#xa;(Validasi ke Server)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#FFA000;strokeWidth=1.5;" vertex="1" parent="lane2">
+          <mxGeometry x="50" y="125" width="190" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="n_val_sec" value="Validasi&#xa;SECRET-KEY?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#FFA000;strokeWidth=1.5;fontStyle=1;" vertex="1" parent="lane2">
+          <mxGeometry x="70" y="355" width="150" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="n_val_req" value="Validasi Input&#xa;&amp; 4 Gambar?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#FFA000;strokeWidth=1.5;fontStyle=1;" vertex="1" parent="lane2">
+          <mxGeometry x="70" y="445" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="n_clean" value="Pembersihan Data:&#xa;1. Prefix Levenshtein&#xa;2. Serial Typo OCR&#xa;3. Format No BPKB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#FFA000;strokeWidth=1.5;align=left;spacingLeft=10;" vertex="1" parent="lane2">
+          <mxGeometry x="50" y="525" width="190" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="n_dispatch" value="Simpan Temp Gambar,&#xa;Buat Tiket BpkbProcessTrack&#xa;&amp; Dispatch Queue Job" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#FFA000;strokeWidth=1.5;" vertex="1" parent="lane2">
+          <mxGeometry x="50" y="615" width="190" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- LANE 3: WORKER -->
+        <mxCell id="lane3" value="BACKGROUND QUEUE WORKER" style="swimlane;html=1;startSize=30;fillColor=#E8F5E9;strokeColor=#388E3C;fontStyle=1;fontSize=11;strokeWidth=1.5;" vertex="1" parent="pool">
+          <mxGeometry x="600" y="0" width="300" height="1060" as="geometry" />
+        </mxCell>
+        <mxCell id="n_downscale" value="Ambil Temp Foto &amp;&#xa;Downscale (Max 1400px)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#388E3C;strokeWidth=1.5;" vertex="1" parent="lane3">
+          <mxGeometry x="55" y="620" width="190" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n_filter" value="Terapkan Filter Scanner&#xa;(Kontras &amp; Penajaman Teks)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#388E3C;strokeWidth=1.5;" vertex="1" parent="lane3">
+          <mxGeometry x="55" y="690" width="190" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n_watermark" value="Terapkan Watermark&#xa;Diagonal 'Menara Agung'" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#388E3C;strokeWidth=1.5;" vertex="1" parent="lane3">
+          <mxGeometry x="55" y="760" width="190" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n_dompdf" value="Render 2 Versi PDF (DomPDF):&#xa;1. Watermark.pdf&#xa;2. Clean.pdf" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#388E3C;strokeWidth=1.5;" vertex="1" parent="lane3">
+          <mxGeometry x="55" y="830" width="190" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="n_cleanup" value="Hapus Temp Gambar &amp;&#xa;Finalisasi Status: Completed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#388E3C;strokeWidth=1.5;fontStyle=1;" vertex="1" parent="lane3">
+          <mxGeometry x="55" y="910" width="190" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- LANE 4: STORAGE -->
+        <mxCell id="lane4" value="SECURE CLOUD STORAGE" style="swimlane;html=1;startSize=30;fillColor=#EDE7F6;strokeColor=#7E57C2;fontStyle=1;fontSize=11;strokeWidth=1.5;" vertex="1" parent="pool">
+          <mxGeometry x="900" y="0" width="260" height="1060" as="geometry" />
+        </mxCell>
+        <mxCell id="n_pdf_wm" value="📄 bpkb/pdf/{konsumen}.pdf&#xa;(Distribusi &amp; Publikasi)" style="shape=note;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7E57C2;strokeWidth=1.5;size=16;" vertex="1" parent="lane4">
+          <mxGeometry x="35" y="825" width="190" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="n_pdf_clean" value="📄 bpkb/pdf/clean/{konsumen}.pdf&#xa;(Master Arsip Bersih)" style="shape=note;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7E57C2;strokeWidth=1.5;size=16;" vertex="1" parent="lane4">
+          <mxGeometry x="35" y="905" width="190" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- LANE 5: SERVER -->
+        <mxCell id="lane5" value="SERVER" style="swimlane;html=1;startSize=30;fillColor=#ECEFF1;strokeColor=#607D8B;fontStyle=1;fontSize=11;strokeWidth=1.5;" vertex="1" parent="pool">
+          <mxGeometry x="1160" y="0" width="280" height="1060" as="geometry" />
+        </mxCell>
+        <mxCell id="n_srv_dealer" value="🖥️ Server NMS&#xa;(Service Stok Unit &amp; Dealer)&#xa;Info Dealer &amp; Bentuk Penjualan" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#607D8B;strokeWidth=1.5;" vertex="1" parent="lane5">
+          <mxGeometry x="45" y="110" width="190" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="n_srv_nms" value="🖥️ Server NMS&#xa;(Master Tipe Kendaraan &amp;&#xa;Data Konsumen)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#607D8B;strokeWidth=1.5;" vertex="1" parent="lane5">
+          <mxGeometry x="45" y="525" width="190" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="n_srv_app" value="🖥️ Server Aplikasi BPKB&#xa;(Service Tracking &amp; Tiket Antrean)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#607D8B;strokeWidth=1.5;" vertex="1" parent="lane5">
+          <mxGeometry x="45" y="655" width="190" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="n_srv_meta" value="🖥️ Server Core ERP&#xa;(Update No BPKB Unit &amp;&#xa;Tgl Kesiapan BPKB)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#607D8B;strokeWidth=1.5;" vertex="1" parent="lane5">
+          <mxGeometry x="45" y="900" width="190" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- ARROWS / EDGES LENGKAP -->
+        <!-- 1. Start Mesin -> Req Dealer -->
+        <mxCell id="edge_m1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#0288D1;strokeWidth=2;" edge="1" parent="1" source="n_start_mesin" target="n_req_dealer">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 2. Req Dealer -> Endpoint Dealer -->
+        <mxCell id="edge_m2" value="HTTP GET" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#0288D1;strokeWidth=2;fontSize=10;fontColor=#01579B;" edge="1" parent="1" source="n_req_dealer" target="n_api_dealer">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 3. Endpoint Dealer <-> Server Dealer NMS -->
+        <mxCell id="edge_m3" value="Cek Dealer &amp; Cash/Kredit" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#607D8B;strokeWidth=1.5;dashed=1;fontSize=10;fontColor=#37474F;" edge="1" parent="1" source="n_api_dealer" target="n_srv_dealer">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 4. Endpoint Dealer -> Show Dealer (Response) -->
+        <mxCell id="edge_m4" value="Return JSON Data" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#0288D1;strokeWidth=2;fontSize=10;fontColor=#01579B;" edge="1" parent="1" source="n_api_dealer" target="n_show_dealer">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="455" y="225" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 5. Show Dealer -> Input No BPKB & 4 Foto -->
+        <mxCell id="edge_m5" value="Unit Terkonfirmasi" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#0288D1;strokeWidth=2;fontSize=10;fontColor=#01579B;" edge="1" parent="1" source="n_show_dealer" target="n_input_bpkb">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 6. Input BPKB & 4 Foto -> Send Process -->
+        <mxCell id="edge_m6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#0288D1;strokeWidth=2;" edge="1" parent="1" source="n_input_bpkb" target="n_send_process">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 7. Send Process -> Validasi Secret Key -->
+        <mxCell id="edge_m7" value="HTTP POST + SECRET-KEY" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#0288D1;strokeWidth=2;fontSize=10;fontColor=#01579B;" edge="1" parent="1" source="n_send_process" target="n_val_sec">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 8. Validasi Secret Key -> Validasi Request -->
+        <mxCell id="edge3" value="Valid" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#FFA000;strokeWidth=2;fontSize=10;fontColor=#E65100;" edge="1" parent="1" source="n_val_sec" target="n_val_req">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 9. Validasi Request -> Pembersihan Data -->
+        <mxCell id="edge4" value="Lolos (Tepat 4 Foto)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#FFA000;strokeWidth=2;fontSize=10;fontColor=#E65100;" edge="1" parent="1" source="n_val_req" target="n_clean">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 10. Pembersihan Data <-> Server NMS (Lookup) -->
+        <mxCell id="edge5" value="Lookup Prefix &amp; Cust" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#607D8B;strokeWidth=1.5;dashed=1;fontSize=10;fontColor=#37474F;" edge="1" parent="1" source="n_clean" target="n_srv_nms">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 11. Pembersihan Data -> Dispatch -->
+        <mxCell id="edge6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#FFA000;strokeWidth=2;" edge="1" parent="1" source="n_clean" target="n_dispatch">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 12. Dispatch -> Insert Server App -->
+        <mxCell id="edge7" value="Catat Tiket Antrean" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#607D8B;strokeWidth=1.5;dashed=1;fontSize=10;fontColor=#37474F;" edge="1" parent="1" source="n_dispatch" target="n_srv_app">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 13. Dispatch -> Terima Tiket (Response 202) -->
+        <mxCell id="edge8" value="202 Accepted (track_id)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#0288D1;strokeWidth=2;fontSize=10;fontColor=#01579B;" edge="1" parent="1" source="n_dispatch" target="n_recv_ticket">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 14. Terima Tiket -> Pantau Status -->
+        <mxCell id="edge9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#0288D1;strokeWidth=2;" edge="1" parent="1" source="n_recv_ticket" target="n_track">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 15. Pantau Status <-> Server App (SSE Polling) -->
+        <mxCell id="edge10" value="SSE Stream Status" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#607D8B;strokeWidth=1.5;dashed=1;fontSize=10;fontColor=#37474F;" edge="1" parent="1" source="n_track" target="n_srv_app">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 16. Dispatch -> Queue Worker (Job Dispatch) -->
+        <mxCell id="edge11" value="Job Dispatched" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#388E3C;strokeWidth=2;fontSize=10;fontColor=#1B5E20;" edge="1" parent="1" source="n_dispatch" target="n_downscale">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 17. Downscale -> Filter Scanner -->
+        <mxCell id="edge12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#388E3C;strokeWidth=2;" edge="1" parent="1" source="n_downscale" target="n_filter">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 18. Filter Scanner -> Watermark -->
+        <mxCell id="edge13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#388E3C;strokeWidth=2;" edge="1" parent="1" source="n_filter" target="n_watermark">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 19. Watermark -> DomPDF -->
+        <mxCell id="edge14" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#388E3C;strokeWidth=2;" edge="1" parent="1" source="n_watermark" target="n_dompdf">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 20. DomPDF -> Simpan PDF Watermark -->
+        <mxCell id="edge15" value="Simpan WM PDF" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7E57C2;strokeWidth=2;fontSize=10;fontColor=#4A148C;" edge="1" parent="1" source="n_dompdf" target="n_pdf_wm">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 21. DomPDF -> Simpan PDF Clean -->
+        <mxCell id="edge16" value="Simpan Clean PDF" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7E57C2;strokeWidth=2;fontSize=10;fontColor=#4A148C;" edge="1" parent="1" source="n_dompdf" target="n_pdf_clean">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 22. DomPDF -> Cleanup & Finalisasi -->
+        <mxCell id="edge17" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#388E3C;strokeWidth=2;" edge="1" parent="1" source="n_dompdf" target="n_cleanup">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 23. Cleanup -> Update Server Meta -->
+        <mxCell id="edge18" value="Update Stock &amp; Tgl Siap" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#607D8B;strokeWidth=1.5;dashed=1;fontSize=10;fontColor=#37474F;" edge="1" parent="1" source="n_cleanup" target="n_srv_meta">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 24. Cleanup -> Update Status Completed di Server App -->
+        <mxCell id="edge19" value="Status: Completed" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#607D8B;strokeWidth=1.5;dashed=1;fontSize=10;fontColor=#37474F;" edge="1" parent="1" source="n_cleanup" target="n_srv_app">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 25. Pantau Status -> Unduh PDF -->
+        <mxCell id="edge20" value="Ketika Completed" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#0288D1;strokeWidth=2;fontSize=10;fontColor=#01579B;" edge="1" parent="1" source="n_track" target="n_download">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 26. PDF Storage -> Unduh PDF -->
+        <mxCell id="edge21" value="Stream / Download File" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#C2185B;strokeWidth=2;fontSize=10;fontColor=#880E4F;" edge="1" parent="1" source="n_pdf_wm" target="n_download">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1030" y="950" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

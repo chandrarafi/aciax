@@ -10,18 +10,28 @@ Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
 
-Route::get('/get-dealer', function (Request $request) {
-    $dealers = DB::connection('pgsql_nms')
-        ->table('H1_DOS.stokunit as stokunit')
-        ->select(['stokunit.fk_dealer', 'd.nm_dealer',
-            DB::raw("CASE WHEN stokunit.bentuk_penjualan = '1' THEN 'Cash' WHEN stokunit.bentuk_penjualan = '2' THEN 'Kredit' ELSE 'Lainnya' END as bentuk_penjualan"),])
-        ->join('public.tbldealer as d', 'd.kd_dealer_md', '=', 'stokunit.fk_dealer')
-        ->where('stokunit.no_mesin', $request->input('nomesin'))
-        ->first();
-    return response()->json($dealers);
-});
+
 
 Route::middleware('check-secret-key')->group(function () {
+
+    Route::get('/get-dealer', function (Request $request) {
+        $bpkbController = app(BpkbController::class);
+        $cleansingResult = $bpkbController->cleansingNoMesinWithDetails($request->input('nomesin', ''));
+
+        $dealers = DB::connection('pgsql_nms')
+            ->table('H1_DOS.stokunit as stokunit')
+            ->select(['stokunit.fk_dealer', 'd.nm_dealer','stokunit.no_mesin',
+                DB::raw("CASE WHEN stokunit.bentuk_penjualan = '1' THEN 'Cash' WHEN stokunit.bentuk_penjualan = '2' THEN 'Kredit' ELSE 'Lainnya' END as bentuk_penjualan"),])
+            ->join('public.tbldealer as d', 'd.kd_dealer_md', '=', 'stokunit.fk_dealer')
+            ->where('stokunit.no_mesin', $cleansingResult['cleansed'])
+            ->first();
+
+        $response = $dealers ? (array) $dealers : [];
+        $response['akurasi'] = $cleansingResult['overall_accuracy_pct'] . '%';
+
+        return response()->json($response);
+    });
+
     Route::post('/bpkb/process', [BpkbController::class, 'process']);
     Route::get('/bpkb/recent', [BpkbController::class, 'recent']);
     Route::get('/bpkb/monitoring', [BpkbController::class, 'monitoring']);
@@ -39,4 +49,7 @@ Route::middleware('check-secret-key')->group(function () {
     Route::get('/activity/today', [BpkbController::class, 'activityToday']);
     Route::get('/bpkb/settings/scan-effect', [BpkbController::class, 'getScanEffectSetting']);
     Route::post('/bpkb/settings/scan-effect', [BpkbController::class, 'updateScanEffectSetting']);
+    Route::post('/bpkb/retry', [BpkbController::class, 'retry']);
+    Route::post('/bpkb/retry/{track}', [BpkbController::class, 'retry']);
+    Route::post('/bpkb/retry-all-failed', [BpkbController::class, 'retryAllFailed']);
 });

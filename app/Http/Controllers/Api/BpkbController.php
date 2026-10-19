@@ -54,10 +54,10 @@ class BpkbController extends Controller
 
     /**
      * Function untuk melakukan cleansing no_bpkb dari request.
-     * 
+     *
      * Contoh Input : "W02371856-BPKB POLRI 2025"
      * Result Output: "W-02371856"
-     * 
+     *
      * @param string $rawNoBpkb
      * @return string
      */
@@ -87,27 +87,95 @@ class BpkbController extends Controller
      */
     public function cleansingNoMesin(string $rawNoMesin): string
     {
+        return $this->cleansingNoMesinWithDetails($rawNoMesin)['cleansed'];
+    }
+
+    /**
+     * Cleansing nomor mesin dengan detail akurasi Levenshtein Distance.
+     *
+     * Mengembalikan array berisi:
+     * - original: nomor mesin asli (setelah uppercase/trim)
+     * - cleansed: nomor mesin hasil cleansing
+     * - prefix_original / prefix_cleansed: detail prefix
+     * - serial_original / serial_cleansed: detail serial
+     * - levenshtein_distance: jarak edit prefix terhadap DB
+     * - serial_corrections: jumlah digit serial yang dikoreksi
+     * - prefix_accuracy_pct: persen akurasi prefix (Levenshtein)
+     * - serial_accuracy_pct: persen akurasi serial (char mapping)
+     * - overall_accuracy_pct: persen akurasi keseluruhan
+     *
+     * @param string $rawNoMesin
+     * @return array
+     */
+    public function cleansingNoMesinWithDetails(string $rawNoMesin): array
+    {
         $rawNoMesin = strtoupper(trim($rawNoMesin));
 
-        // Jika panjang kurang dari 12 karakter, kembalikan string asli
+        $result = [
+            'original'             => $rawNoMesin,
+            'cleansed'             => $rawNoMesin,
+            'prefix_original'      => null,
+            'prefix_cleansed'      => null,
+            'prefix_matched_from'  => null,
+            'levenshtein_distance' => 0,
+            'prefix_accuracy_pct'  => 100.0,
+            'serial_original'      => null,
+            'serial_cleansed'      => null,
+            'serial_corrections'   => 0,
+            'serial_accuracy_pct'  => 100.0,
+            'overall_accuracy_pct' => 100.0,
+        ];
+
         if (strlen($rawNoMesin) < 12) {
-            return $rawNoMesin;
+            return $result;
         }
 
-        // Split 5 digit prefix dan 7 digit serial number
         $rawPrefix = substr($rawNoMesin, 0, 5);
         $rawSerial = substr($rawNoMesin, 5, 7);
 
-        // 1. Cleansing 5 digit prefix berdasarkan kemiripan data di public.tbltipe_kendaraan
-        $cleansedPrefix = $this->getClosestPrefixFromDb($rawPrefix);
+        // 1. Cleansing prefix dengan info distance
+        $prefixInfo = $this->getClosestPrefixWithDistance($rawPrefix);
+        $cleansedPrefix = $prefixInfo['prefix'];
+        $prefixDistance = $prefixInfo['distance'];
 
-        // 2. Cleansing 7 digit serial number (ganti karakter huruf typo menjadi angka)
+        // 2. Cleansing serial
         $cleansedSerial = $this->cleansingSerialDigits($rawSerial);
+        $serialCorrections = 0;
+        $serialLen = strlen($rawSerial);
+        for ($i = 0; $i < $serialLen; $i++) {
+            if ($rawSerial[$i] !== $cleansedSerial[$i]) {
+                $serialCorrections++;
+            }
+        }
 
-        // Gabungkan kembali (serta sisa karakter jika nomor mesin > 12 digit)
+        // 3. Gabungkan
         $suffix = strlen($rawNoMesin) > 12 ? substr($rawNoMesin, 12) : '';
+        $cleansed = $cleansedPrefix . $cleansedSerial . $suffix;
 
-        return $cleansedPrefix . $cleansedSerial . $suffix;
+        // 4. Hitung akurasi
+        $prefixLen = max(strlen($rawPrefix), 1);
+        $prefixAccuracy = round((1 - $prefixDistance / $prefixLen) * 100, 2);
+
+        $serialLenSafe = max($serialLen, 1);
+        $serialAccuracy = round((1 - $serialCorrections / $serialLenSafe) * 100, 2);
+
+        $totalLen = max($prefixLen + $serialLen, 1);
+        $totalChanges = $prefixDistance + $serialCorrections;
+        $overallAccuracy = round((1 - $totalChanges / $totalLen) * 100, 2);
+
+        $result['cleansed']             = $cleansed;
+        $result['prefix_original']      = $rawPrefix;
+        $result['prefix_cleansed']      = $cleansedPrefix;
+        $result['prefix_matched_from']  = $prefixInfo['source'];
+        $result['levenshtein_distance'] = $prefixDistance;
+        $result['prefix_accuracy_pct']  = $prefixAccuracy;
+        $result['serial_original']      = $rawSerial;
+        $result['serial_cleansed']      = $cleansedSerial;
+        $result['serial_corrections']   = $serialCorrections;
+        $result['serial_accuracy_pct']  = $serialAccuracy;
+        $result['overall_accuracy_pct'] = $overallAccuracy;
+
+        return $result;
     }
 
     /**
@@ -115,8 +183,17 @@ class BpkbController extends Controller
      */
     private function getClosestPrefixFromDb(string $rawPrefix): string
     {
+        return $this->getClosestPrefixWithDistance($rawPrefix)['prefix'];
+    }
+
+    /**
+     * Mencari prefix 5 digit paling mirip + mengembalikan Levenshtein distance dan sumber match.
+     *
+     * @return array{prefix: string, distance: int, source: string}
+     */
+    private function getClosestPrefixWithDistance(string $rawPrefix): array
+    {
         try {
-            // Ambil daftar prefix (5 karakter pertama) dari kolom digit_no_mesin di public.tbltipe_kendaraan
             $prefixes = DB::connection('pgsql_nms')
                 ->table('public.tbltipe_kendaraan')
                 ->whereNotNull('digit_no_mesin')
@@ -126,18 +203,17 @@ class BpkbController extends Controller
                 ->toArray();
 
             if (empty($prefixes)) {
-                return $rawPrefix;
+                return ['prefix' => $rawPrefix, 'distance' => 0, 'source' => 'fallback_empty_db'];
             }
 
             $bestMatch = $rawPrefix;
             $minDistance = -1;
 
             foreach ($prefixes as $validPrefix) {
-                // Gunakan Levenshtein distance untuk mencari string paling mirip
                 $distance = levenshtein($rawPrefix, $validPrefix);
 
                 if ($distance === 0) {
-                    return $validPrefix; // Match sempurna
+                    return ['prefix' => $validPrefix, 'distance' => 0, 'source' => 'exact_match'];
                 }
 
                 if ($minDistance === -1 || $distance < $minDistance) {
@@ -146,11 +222,13 @@ class BpkbController extends Controller
                 }
             }
 
-            // Jika jarak kemiripan terdekat <= 2 karakter, gunakan bestMatch
-            return ($minDistance >= 0 && $minDistance <= 2) ? $bestMatch : $rawPrefix;
+            if ($minDistance >= 0 && $minDistance <= 2) {
+                return ['prefix' => $bestMatch, 'distance' => $minDistance, 'source' => 'levenshtein_match'];
+            }
+
+            return ['prefix' => $rawPrefix, 'distance' => $minDistance, 'source' => 'fallback_too_far'];
         } catch (\Throwable $e) {
-            // Jika terjadi kegagalan query, fallback ke prefix asli
-            return $rawPrefix;
+            return ['prefix' => $rawPrefix, 'distance' => 0, 'source' => 'fallback_error'];
         }
     }
 
@@ -324,7 +402,7 @@ class BpkbController extends Controller
 
         if ($filePath) {
             $normalizedPath = str_replace('\\', '/', ltrim($filePath, '/\\'));
-            
+
             if (Storage::disk('secure')->exists($normalizedPath)) {
                 $resolvedDisk = 'secure';
             } elseif (Storage::disk('local')->exists($normalizedPath)) {
@@ -526,7 +604,7 @@ class BpkbController extends Controller
 
     /**
      * API Monitoring BPKB yang sudah diproses dan tersimpan di secure storage server.
-     * 
+     *
      * Filter yang didukung:
      * - search: mencari di no_mesin, no_bpkb, nama_konsumen, atau track_id
      * - status: completed, processing, queued, failed
@@ -704,6 +782,195 @@ class BpkbController extends Controller
             'enabled'    => \App\Models\BpkbSetting::isScanEffectEnabled(),
             'contrast'   => \App\Models\BpkbSetting::getScanContrast(),
             'brightness' => \App\Models\BpkbSetting::getScanBrightness(),
+        ]);
+    }
+
+    /**
+     * Mengulang (retry) proses BPKB yang gagal.
+     * Mendukung pencarian berdasarkan:
+     * - Route parameter {track} (UUID)
+     * - Query/Body track_id (UUID)
+     * - Query/Body nomesin (Nomor Mesin)
+     * - Query/Body nobpkb (Nomor BPKB)
+     *
+     * Mendukung upload file gambar baru jika sebelumnya gagal karena gambar hilang/rusak.
+     */
+    public function retry(Request $request, ?BpkbProcessTrack $track = null): JsonResponse
+    {
+        $targetTrack = ($track && $track->exists) ? $track : null;
+
+        if (!$targetTrack && $request->filled('track_id')) {
+            $targetTrack = BpkbProcessTrack::find($request->input('track_id'));
+        }
+
+        if (!$targetTrack && $request->filled('nomesin')) {
+            $cleansedNoMesin = $this->cleansingNoMesin($request->input('nomesin'));
+            $targetTrack = BpkbProcessTrack::where('no_mesin', $cleansedNoMesin)
+                ->orderByRaw("CASE WHEN status = 'failed' THEN 1 WHEN status = 'queued' THEN 2 ELSE 3 END")
+                ->latest()
+                ->first();
+        }
+
+        if (!$targetTrack && $request->filled('nobpkb')) {
+            $cleansedNoBpkb = $this->cleansingNoBpkb($request->input('nobpkb'));
+            $targetTrack = BpkbProcessTrack::where('no_bpkb', $cleansedNoBpkb)
+                ->orderByRaw("CASE WHEN status = 'failed' THEN 1 WHEN status = 'queued' THEN 2 ELSE 3 END")
+                ->latest()
+                ->first();
+        }
+
+        if (!$targetTrack) {
+            return response()->json([
+                'status'  => false,
+                'code'    => 'TRACK_NOT_FOUND',
+                'message' => 'Data tracking proses BPKB tidak ditemukan.',
+            ], 404);
+        }
+
+        // Cek jika proses sedang berjalan
+        if ($targetTrack->status === 'processing' && !$request->boolean('force')) {
+            return response()->json([
+                'status'   => false,
+                'code'     => 'ALREADY_PROCESSING',
+                'message'  => 'Proses BPKB saat ini sedang berjalan (tahap: ' . ($targetTrack->stage ?? 'processing') . '). Gunakan parameter force=true jika ingin memaksa antri ulang.',
+                'track_id' => (string) $targetTrack->id,
+            ], 409);
+        }
+
+        // Cek jika proses sudah selesai sebelumnya
+        if ($targetTrack->status === 'completed' && !$request->boolean('force')) {
+            return response()->json([
+                'status'   => false,
+                'code'     => 'ALREADY_COMPLETED',
+                'message'  => 'Proses BPKB ini sudah selesai sebelumnya. Gunakan parameter force=true jika ingin memproses ulang dari awal.',
+                'track_id' => (string) $targetTrack->id,
+            ], 422);
+        }
+
+        // Jika request menyertakan gambar baru
+        if ($request->hasFile('images')) {
+            $newImagePaths = [];
+            foreach ($request->file('images') as $image) {
+                $newImagePaths[] = $image->store('bpkb/temp', 'public');
+            }
+            $targetTrack->image_paths = $newImagePaths;
+        }
+
+        // Validasi ketersediaan gambar atau file PDF yang sudah digenerate
+        $hasImages = !empty($targetTrack->image_paths);
+        $hasPdf = !empty($targetTrack->pdf_path) && Storage::disk('secure')->exists($targetTrack->pdf_path);
+
+        if (!$hasImages && !$hasPdf) {
+            return response()->json([
+                'status'   => false,
+                'code'     => 'IMAGES_NOT_FOUND',
+                'message'  => 'File gambar BPKB tidak ditemukan pada storage untuk diproses ulang. Silakan sertakan file images pada request.',
+                'track_id' => (string) $targetTrack->id,
+            ], 422);
+        }
+
+        // Pastikan nama konsumen terisi jika sebelumnya kosong
+        if (empty($targetTrack->nama_konsumen)) {
+            $stokUnit = StokUnit::select('nm_customer')
+                ->where('no_mesin', $targetTrack->no_mesin)
+                ->first();
+            if ($stokUnit?->nm_customer) {
+                $targetTrack->nama_konsumen = $stokUnit->nm_customer;
+            }
+        }
+
+        // Reset status tracking ke queued
+        $targetTrack->stage = 'pending';
+        $targetTrack->status = 'queued';
+        $targetTrack->error_message = null;
+        $targetTrack->save();
+
+        ProcessBpkbJob::dispatch($targetTrack);
+
+        return response()->json([
+            'status'   => true,
+            'message'  => 'Proses BPKB berhasil diantrikan ulang.',
+            'track_id' => (string) $targetTrack->id,
+            'data'     => [
+                'track_id'      => (string) $targetTrack->id,
+                'no_mesin'      => (string) $targetTrack->no_mesin,
+                'no_bpkb'       => (string) $targetTrack->no_bpkb,
+                'nama_konsumen' => $targetTrack->nama_konsumen,
+                'stage'         => $targetTrack->stage,
+                'status'        => $targetTrack->status,
+            ],
+        ], 200);
+    }
+
+    /**
+     * Mengulang semua proses BPKB yang berstatus gagal (failed).
+     */
+    public function retryAllFailed(Request $request): JsonResponse
+    {
+        $limit = max(1, min((int) $request->input('limit', 50), 200));
+
+        $failedTracks = BpkbProcessTrack::where('status', 'failed')
+            ->latest()
+            ->take($limit)
+            ->get();
+
+        if ($failedTracks->isEmpty()) {
+            return response()->json([
+                'status'  => true,
+                'message' => 'Tidak ada proses BPKB yang berstatus gagal untuk diulang.',
+                'count'   => 0,
+                'retried' => [],
+            ]);
+        }
+
+        $retried = [];
+        $skipped = [];
+
+        foreach ($failedTracks as $track) {
+            $hasImages = !empty($track->image_paths);
+            $hasPdf = !empty($track->pdf_path) && Storage::disk('secure')->exists($track->pdf_path);
+
+            if (!$hasImages && !$hasPdf) {
+                $skipped[] = [
+                    'track_id' => (string) $track->id,
+                    'no_mesin' => (string) $track->no_mesin,
+                    'reason'   => 'File gambar dan PDF tidak ditemukan di server.',
+                ];
+                continue;
+            }
+
+            if (empty($track->nama_konsumen)) {
+                $stokUnit = StokUnit::select('nm_customer')
+                    ->where('no_mesin', $track->no_mesin)
+                    ->first();
+                if ($stokUnit?->nm_customer) {
+                    $track->nama_konsumen = $stokUnit->nm_customer;
+                }
+            }
+
+            $track->stage = 'pending';
+            $track->status = 'queued';
+            $track->error_message = null;
+            $track->save();
+
+            ProcessBpkbJob::dispatch($track);
+
+            $retried[] = [
+                'track_id'      => (string) $track->id,
+                'no_mesin'      => (string) $track->no_mesin,
+                'no_bpkb'       => (string) $track->no_bpkb,
+                'nama_konsumen' => $track->nama_konsumen,
+            ];
+        }
+
+        return response()->json([
+            'status'        => true,
+            'message'       => count($retried) . ' proses BPKB gagal berhasil diantrikan ulang.',
+            'total_failed'  => $failedTracks->count(),
+            'retried_count' => count($retried),
+            'skipped_count' => count($skipped),
+            'retried'       => $retried,
+            'skipped'       => $skipped,
         ]);
     }
 }
