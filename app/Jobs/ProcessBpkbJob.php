@@ -104,8 +104,8 @@ class ProcessBpkbJob implements ShouldQueue
             $origW = $size[0];
             $origH = $size[1];
 
-            // Downscale gambar resolusi tinggi (misal dari kamera 12MP/24MP) ke max lebar 1400px untuk hasil scan tajam & jernih
-            $maxTargetW = 1400;
+            // Downscale gambar resolusi tinggi (misal dari kamera 12MP/24MP/48MP) ke max lebar 1000px agar hasil scan tetap tajam dan ukuran PDF dijamin < 1MB
+            $maxTargetW = 1000;
             if ($origW > $maxTargetW) {
                 $scale = $maxTargetW / $origW;
                 $newW  = (int) ($origW * $scale);
@@ -142,10 +142,8 @@ class ProcessBpkbJob implements ShouldQueue
                 $this->applyScanEffect($imgClean);
             }
 
-            // Simpan versi clean
-            ob_start();
-            imagejpeg($imgClean, null, 85);
-            $compressedClean = ob_get_clean();
+            // Simpan versi clean terkompresi adaptif (< 220KB per halaman agar total 4 halaman < 1MB)
+            $compressedClean = $this->compressJpegWithQuality($imgClean, 72, 220000);
 
             $imagesClean[] = [
                 'base64' => base64_encode($compressedClean),
@@ -183,9 +181,8 @@ class ProcessBpkbJob implements ShouldQueue
                 }
             }
 
-            ob_start();
-            imagejpeg($imgWm, null, 85);
-            $compressedWm = ob_get_clean();
+            // Simpan versi watermarked terkompresi adaptif (< 220KB per halaman agar total 4 halaman < 1MB)
+            $compressedWm = $this->compressJpegWithQuality($imgWm, 72, 220000);
             imagedestroy($imgWm); // Bebaskan memori canvas watermarked
 
             $imagesWm[] = [
@@ -266,6 +263,28 @@ class ProcessBpkbJob implements ShouldQueue
             [0, -1, 0]
         ];
         imageconvolution($img, $sharpenMatrix, 2, 0);
+    }
+
+    /**
+     * Kompresi JPEG secara adaptif dengan target batas byte per halaman
+     * agar total PDF (4 halaman) dijamin selalu di bawah 1MB (< 1024KB).
+     */
+    private function compressJpegWithQuality($img, int $initialQuality = 72, int $maxBytes = 220000): string
+    {
+        $quality = $initialQuality;
+        ob_start();
+        imagejpeg($img, null, $quality);
+        $data = ob_get_clean();
+
+        // Jika ukuran data masih melebihi batas per-halaman (220KB), turunkan quality secara bertahap
+        while (strlen($data) > $maxBytes && $quality > 40) {
+            $quality -= 6;
+            ob_start();
+            imagejpeg($img, null, $quality);
+            $data = ob_get_clean();
+        }
+
+        return $data;
     }
 
     private function cleanupTempImages(): void
