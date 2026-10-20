@@ -152,12 +152,13 @@ class ProcessBpkbJob implements ShouldQueue
                 'width'  => $pdfW,
                 'height' => $pdfH,
             ];
-            unset($compressedClean);
 
-            // 2. Buat canvas dengan watermark "Menara Agung" miring full persis seperti test_wm.png
-            $imgWm = imagecreatetruecolor($newW, $newH);
-            imagecopy($imgWm, $imgClean, 0, 0, 0, 0, $newW, $newH);
             imagedestroy($imgClean); // Bebaskan memori clean canvas
+
+            // 2. Buat versi watermark: decode gambar yang SUDAH terkompresi, lalu timpa watermark di atasnya.
+            //    Watermark diterapkan SETELAH kompresi agar teks selalu tajam & tidak ikut blur oleh JPEG.
+            $imgWm = imagecreatefromstring($compressedClean);
+            unset($compressedClean);
 
             $font = $this->getAvailableFont();
             $fontSize = 13;
@@ -183,9 +184,12 @@ class ProcessBpkbJob implements ShouldQueue
                 }
             }
 
-            // Simpan versi watermarked terkompresi adaptif (< 220KB per halaman agar total 4 halaman < 1MB)
-            $compressedWm = $this->compressJpegWithQuality($imgWm, $compressQuality, 220000);
-            imagedestroy($imgWm); // Bebaskan memori canvas watermarked
+            // Simpan watermark - quality tinggi karena base image sudah terkompresi,
+            // hanya menambah layer teks watermark yang ringan
+            ob_start();
+            imagejpeg($imgWm, null, 90);
+            $compressedWm = ob_get_clean();
+            imagedestroy($imgWm);
 
             $imagesWm[] = [
                 'base64' => base64_encode($compressedWm),
@@ -271,7 +275,7 @@ class ProcessBpkbJob implements ShouldQueue
      * Kompresi JPEG secara adaptif dengan target batas byte per halaman
      * agar total PDF (4 halaman) dijamin selalu di bawah 1MB (< 1024KB).
      */
-    private function compressJpegWithQuality($img, int $initialQuality = 72, int $maxBytes = 220000): string
+    private function compressJpegWithQuality($img, int $initialQuality = 72, int $maxBytes = 220000, int $minQuality = 40): string
     {
         $quality = $initialQuality;
         ob_start();
@@ -279,7 +283,7 @@ class ProcessBpkbJob implements ShouldQueue
         $data = ob_get_clean();
 
         // Jika ukuran data masih melebihi batas per-halaman (220KB), turunkan quality secara bertahap
-        while (strlen($data) > $maxBytes && $quality > 40) {
+        while (strlen($data) > $maxBytes && $quality > $minQuality) {
             $quality -= 6;
             ob_start();
             imagejpeg($img, null, $quality);
