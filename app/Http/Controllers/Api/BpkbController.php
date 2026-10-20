@@ -35,6 +35,18 @@ class BpkbController extends Controller
             ->where('no_mesin', $cleansedNoMesin)
             ->first();
 
+        // Guard: cegah duplikat jika no_mesin yang sama masih dalam antrian atau sedang diproses
+        $existing = BpkbProcessTrack::where('no_mesin', $cleansedNoMesin)
+            ->whereIn('status', ['queued', 'processing'])
+            ->first();
+
+        if ($existing) {
+            return response()->json([
+                'message'  => 'BPKB dengan nomor mesin ini sudah dalam antrian.',
+                'track_id' => $existing->id,
+            ], 409);
+        }
+
         $track = BpkbProcessTrack::create([
             'no_mesin'       => $cleansedNoMesin,
             'no_bpkb'        => $cleansedNoBpkb,
