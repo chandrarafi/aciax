@@ -106,8 +106,8 @@ class ProcessBpkbJob implements ShouldQueue
             $origW = $size[0];
             $origH = $size[1];
 
-            // Downscale gambar resolusi tinggi (misal dari kamera 12MP/24MP/48MP) ke max lebar 1000px agar hasil scan tetap tajam dan ukuran PDF dijamin < 1MB
-            $maxTargetW = 1000;
+            // Downscale gambar resolusi tinggi ke max lebar 800px agar ukuran PDF ~300KB
+            $maxTargetW = 800;
             if ($origW > $maxTargetW) {
                 $scale = $maxTargetW / $origW;
                 $newW  = (int) ($origW * $scale);
@@ -144,8 +144,8 @@ class ProcessBpkbJob implements ShouldQueue
                 $this->applyScanEffect($imgClean);
             }
 
-            // Simpan versi clean terkompresi adaptif (< 220KB per halaman agar total 4 halaman < 1MB)
-            $compressedClean = $this->compressJpegWithQuality($imgClean, $compressQuality, 220000);
+            // Simpan versi clean terkompresi adaptif (~70KB per halaman agar total 4 halaman ~300KB)
+            $compressedClean = $this->compressJpegWithQuality($imgClean, $compressQuality, 70000);
 
             $imagesClean[] = [
                 'base64' => base64_encode($compressedClean),
@@ -184,10 +184,10 @@ class ProcessBpkbJob implements ShouldQueue
                 }
             }
 
-            // Simpan watermark - quality tinggi karena base image sudah terkompresi,
-            // hanya menambah layer teks watermark yang ringan
+            // Simpan watermark - base image sudah terkompresi ~70KB,
+            // quality 70 cukup untuk menjaga watermark tetap tajam tanpa membengkak
             ob_start();
-            imagejpeg($imgWm, null, 90);
+            imagejpeg($imgWm, null, 70);
             $compressedWm = ob_get_clean();
             imagedestroy($imgWm);
 
