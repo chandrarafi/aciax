@@ -60,7 +60,7 @@ return [
             'search_path' => 'H1_DOS',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
         ],
-        
+
         'pgsql_meta' => [
             'driver' => 'pgsql',
             'host' => env('DB_HOST_META'),

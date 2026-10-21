@@ -10,6 +10,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class ProcessBpkbJob implements ShouldQueue
@@ -312,8 +313,8 @@ class ProcessBpkbJob implements ShouldQueue
         $this->track->update(['stage' => 'update_stok_unit']);
         sleep(2);
 
-        DB::connection('pgsql_meta')
-            ->table('tblstock_unit')
+        DB::connection('pgsql_nms')
+            ->table('H1_DOS.stokunit')
             ->where('no_mesin', $this->track->no_mesin)
             ->update(['no_bpkb' => $this->track->no_bpkb]);
     }
@@ -323,17 +324,34 @@ class ProcessBpkbJob implements ShouldQueue
         $this->track->update(['stage' => 'update_tgl_bpkb_siap']);
         sleep(2);
 
-        $detail = DB::connection('pgsql_meta')
-            ->table('tblterima_bpkb_detail')
-            ->where('fk_mesin', $this->track->no_mesin)
-            ->select('fk_tanda_terima')
-            ->first();
+        $noMesin = $this->track->no_mesin;
+        $noBpkb  = $this->track->no_bpkb;
 
-        if ($detail) {
-            DB::connection('pgsql_meta')
-                ->table('tblterima_bpkb')
-                ->where('no_tanda_terima', $detail->fk_tanda_terima)
-                ->update(['tgl_bpkb_siap' => now()]);
+        if (blank($noMesin) || blank($noBpkb)) {
+            Log::warning('Gagal update tgl_bpkb_siap: no_mesin atau no_bpkb kosong.', [
+                'track_id' => $this->track->id,
+                'no_mesin' => $noMesin,
+                'no_bpkb'  => $noBpkb,
+            ]);
+            return;
+        }
+
+        $now = now();
+
+        $affected = DB::connection('pgsql_nms')
+            ->table('data_unit.tblbastd_detail')
+            ->where('fk_mesin', $noMesin)
+            ->update([
+                'no_bpkb'        => $noBpkb,
+                'tgl_input_bpkb' => $now,
+                'tgl_bpkb_siap'  => $now,
+            ]);
+
+        if ($affected === 0) {
+            Log::warning('Data tblbastd_detail tidak ditemukan untuk update BPKB.', [
+                'track_id' => $this->track->id,
+                'no_mesin' => $noMesin,
+            ]);
         }
     }
 }

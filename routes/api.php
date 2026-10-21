@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\BpkbController;
+use App\Http\Controllers\Api\BastdDetailController;
 use App\Models\StokUnit;
 use Illuminate\Support\Facades\DB;
 
@@ -54,4 +55,9 @@ Route::middleware('check-secret-key')->group(function () {
     Route::post('/bpkb/retry', [BpkbController::class, 'retry']);
     Route::post('/bpkb/retry/{track}', [BpkbController::class, 'retry']);
     Route::post('/bpkb/retry-all-failed', [BpkbController::class, 'retryAllFailed']);
+
+    // API data_unit.tblbastd_detail
+    Route::get('/bastd-detail', [BastdDetailController::class, 'index']);
+    Route::get('/bastd-detail/{no_mesin}', [BastdDetailController::class, 'showByMesin']);
+    Route::get('/tblbastd-detail', [BastdDetailController::class, 'index']);
 });
