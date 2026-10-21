@@ -338,17 +338,30 @@ class ProcessBpkbJob implements ShouldQueue
 
         $now = now();
 
+        $databastd = DB::connection('pgsql_nms')
+            ->table('data_unit.tblbastd_detail')
+            ->where('fk_mesin', $noMesin)
+            ->first();
+
+        if (! $databastd) {
+            Log::warning('Data BASTD tidak ditemukan untuk update BPKB.', [
+                'track_id' => $this->track->id,
+                'no_mesin' => $noMesin,
+            ]);
+            return;
+        }
+
         $affected = DB::connection('pgsql_nms')
             ->table('data_unit.tblbastd_detail')
             ->where('fk_mesin', $noMesin)
             ->update([
                 'no_bpkb'        => $noBpkb,
                 'tgl_input_bpkb' => $now,
-                'tgl_bpkb_siap'  => $now,
+                'tgl_bpkb_siap'  => $databastd->tgl_mohon_samsat,
             ]);
 
         if ($affected === 0) {
-            Log::warning('Data tblbastd_detail tidak ditemukan untuk update BPKB.', [
+            Log::warning('Data BASTD tidak ditemukan untuk update BPKB.', [
                 'track_id' => $this->track->id,
                 'no_mesin' => $noMesin,
             ]);
