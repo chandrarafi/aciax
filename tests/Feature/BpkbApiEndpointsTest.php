@@ -175,4 +175,37 @@ class BpkbApiEndpointsTest extends TestCase
                 ],
             ]);
     }
+
+    public function test_retry_with_corrected_no_mesin(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('secure');
+        $pdfPath = 'bpkb/pdf/test_retry.pdf';
+        \Illuminate\Support\Facades\Storage::disk('secure')->put($pdfPath, 'dummy pdf content');
+
+        $track = BpkbProcessTrack::create([
+            'no_mesin'  => 'JMF2E1833648',
+            'no_bpkb'   => 'X-00338213',
+            'stage'     => 'failed',
+            'status'    => 'failed',
+            'pdf_path'  => $pdfPath,
+        ]);
+
+        $response = $this->withHeaders($this->getHeaders())
+            ->postJson("/api/bpkb/retry/{$track->id}", [
+                'nomesin' => 'JMF2E1838648',
+            ]);
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'status' => true,
+                'data'   => [
+                    'track_id' => (string) $track->id,
+                    'no_mesin' => 'JMF2E1838648',
+                    'no_bpkb'  => 'X-00338213',
+                ],
+            ]);
+
+        $track->refresh();
+        $this->assertEquals('JMF2E1838648', $track->no_mesin);
+    }
 }

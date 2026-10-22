@@ -39,6 +39,11 @@ Dokumentasi lengkap seluruh Application Programming Interface (API) pada sistem 
      - [`POST /api/bpkb/settings/scan-effect`](#post-apibpkbsettingsscan-effect)
    - [4.7 User / Profil](#47-user--profil)
      - [`GET /api/user`](#get-apiuser)
+   - [4.8 Rekap & Agregasi Dealer](#48-rekap--agregasi-dealer)
+     - [`GET /api/bpkb/by-dealer`](#get-apibpkbby-dealer)
+   - [4.9 Data BASTD Detail](#49-data-bastd-detail)
+     - [`GET /api/bastd-detail`](#get-apibastd-detail)
+     - [`GET /api/bastd-detail/{no_mesin}`](#get-apibastd-detailno_mesin)
 5. [Algoritma Cleansing Nomor Mesin & Akurasi Levenshtein](#5-algoritma-cleansing-nomor-mesin--akurasi-levenshtein)
 6. [Siklus Hidup Status & Tahapan (Life Cycle)](#6-siklus-hidup-status--tahapan-life-cycle)
 7. [Panduan Integrasi & Kode Sampel](#7-panduan-integrasi--kode-sampel)
@@ -341,6 +346,8 @@ Mengulang proses dokumen BPKB yang gagal (`status: failed`).
 * **Parameter Opsional:**
   | Field | Tipe | Keterangan |
   |---|---|---|
+  | `nomesin` / `no_mesin` | string | **Koreksi Nomor Mesin:** Mengubah nomor mesin pada track yang dipilih. Sistem otomatis menghitung ulang akurasi, serta mengambil ulang nama konsumen, dealer, dan tanggal samsat. |
+  | `nobpkb` / `no_bpkb` | string | **Koreksi Nomor BPKB:** Mengubah nomor BPKB jika terjadi salah ketik. |
   | `force` | boolean | Set `true` jika ingin memaksa antri ulang meskipun status saat ini `processing` atau `completed`. |
   | `images[]` | file array | Sertakan file gambar baru jika sebelumnya proses gagal karena gambar hilang/rusak. |
 
@@ -367,11 +374,15 @@ Mengulang proses dokumen BPKB yang gagal (`status: failed`).
           "no_mesin": "JFV1E1734840",
           "no_bpkb": "V-02371856",
           "nama_konsumen": "BUDI SANTOSO",
+          "fk_dealer": "DLR01",
+          "tgl_mohon_samsat": "2026-04-10",
           "stage": "pending",
           "status": "queued"
       }
   }
   ```
+
+> 💡 **Auto-Backfill Metadata:** Saat proses retry dipicu, sistem otomatis memeriksa dan melengkapi kembali data `nama_konsumen` & `fk_dealer` dari tabel `tblstock_unit`, serta `tgl_mohon_samsat` dari `tblbastd_detail` jika sebelumnya masih kosong.
 
 ---
 
@@ -627,6 +638,97 @@ Mengambil data identitas user yang sedang aktif.
       "updated_at": "2026-01-01T00:00:00.000000Z"
   }
   ```
+
+---
+
+### 4.8 Rekap & Agregasi Dealer
+
+#### `GET /api/bpkb/by-dealer`
+*(Alias: `GET /api/bpkb/summary/dealer`)*
+
+Menghitung jumlah data proses BPKB per **Dealer (`fk_dealer`)** dan per **Tanggal Mohon Samsat (`tgl_mohon_samsat`)**, sekaligus mengembalikan daftar rincian unit dokumennya yang dikelompokkan berdasarkan dealer. Nama dealer (`nm_dealer`) otomatis di-resolve dari tabel `public.tbldealer` di database `pgsql_nms`.
+
+* **Headers:** `SECRET-KEY: <key>`
+* **Query Parameters (Opsional):**
+  | Parameter | Tipe | Keterangan |
+  |---|---|---|
+  | `fk_dealer` | string | Filter kode dealer tertentu (contoh: `DLR01`). |
+  | `date` / `tgl_mohon_samsat` | string | Filter tanggal spesifik (`YYYY-MM-DD`). |
+  | `start_date` & `end_date` | string | Filter rentang tanggal (`YYYY-MM-DD`). |
+  | `month` | string | Filter bulan (`YYYY-MM`). |
+  | `status` | string | Filter status: `completed`, `processing`, `queued`, `failed`. |
+  | `search` | string | Pencarian pada nomor mesin, BPKB, nama, atau dealer. |
+  | `include_details` | boolean | Default `true`. Set `false` jika hanya ingin summary counter tanpa array rincian unit. |
+  | `sort_by` | string | `total` (default: terbanyak) atau `fk_dealer` (abjad kode dealer). |
+
+* **Respon Sukses (200 OK):**
+  ```json
+  {
+      "status": true,
+      "message": "Data berhasil dikelompokkan per fk_dealer dan tgl_mohon_samsat.",
+      "summary": {
+          "total_dealers": 2,
+          "total_records": 3,
+          "total_completed": 2,
+          "total_processing": 0,
+          "total_queued": 1,
+          "total_failed": 0
+      },
+      "data": [
+          {
+              "fk_dealer": "DLR01",
+              "nm_dealer": "Nusantara Motor",
+              "total": 2,
+              "dates": [
+                  {
+                      "tgl_mohon_samsat": "2026-04-10",
+                      "total": 2,
+                      "details": [
+                          {
+                              "track_id": "01a16183-1699-7184-a08c-8fc6a9c456c5",
+                              "no_mesin": "JME1E2977871",
+                              "no_bpkb": "W-02371871",
+                              "nama_konsumen": "Budi Santoso",
+                              "fk_dealer": "DLR01",
+                              "tgl_mohon_samsat": "2026-04-10",
+                              "status": "completed",
+                              "stage": "completed",
+                              "pdf_path": "bpkb/pdf/01a16183-1699-7184-a08c-8fc6a9c456c5.pdf",
+                              "file_url": "http://localhost:8000/api/bpkb/file/01a16183-1699-7184-a08c-8fc6a9c456c5",
+                              "created_at": "2026-10-22 09:40:00"
+                          }
+                      ]
+                  }
+              ]
+          }
+      ]
+  }
+  ```
+
+---
+
+### 4.9 Data BASTD Detail
+
+#### `GET /api/bastd-detail`
+*(Alias: `GET /api/tblbastd-detail`)*
+
+Mengambil data dari tabel `data_unit.tblbastd_detail` pada database PostgreSQL NMS (`pgsql_nms`).
+
+* **Headers:** `SECRET-KEY: <key>`
+* **Query Parameters (Opsional):**
+  | Parameter | Tipe | Keterangan |
+  |---|---|---|
+  | `no_mesin` / `nomesin` / `fk_mesin` | string | Filter nomor mesin (mencocokkan kolom `fk_mesin`). |
+  | `like` | boolean | Set `true` untuk pencarian partial (ILIKE `%keyword%`). |
+  | `fk_bastd` | string | Filter nomor BASTD. |
+  | `no_bpkb` | string | Filter nomor BPKB. |
+  | `no_stnk` | string | Filter nomor STNK. |
+  | `no_polisi` | string | Filter plat polisi. |
+  | `paginate` | boolean | Default `true`. Set `false` atau `all=true` untuk mengambil data langsung tanpa wrapper pagination. |
+  | `per_page` | integer | Jumlah data per halaman (default: `50`, maks: `500`). |
+
+#### `GET /api/bastd-detail/{no_mesin}`
+Shortcut untuk mengambil langsung data BASTD detail berdasarkan nomor mesin pada path URL.
 
 ---
 

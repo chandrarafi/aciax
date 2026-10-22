@@ -953,29 +953,72 @@ class BpkbController extends Controller
             ], 422);
         }
 
-        // Pastikan nama konsumen, fk_dealer, dan tgl_mohon_samsat terisi jika sebelumnya kosong
-        if (empty($targetTrack->nama_konsumen) || empty($targetTrack->fk_dealer)) {
-            $stokUnit = StokUnit::select('nm_customer', 'fk_dealer')
-                ->where('no_mesin', $targetTrack->no_mesin)
-                ->first();
-            if ($stokUnit) {
-                if (empty($targetTrack->nama_konsumen) && $stokUnit->nm_customer) {
-                    $targetTrack->nama_konsumen = $stokUnit->nm_customer;
-                }
-                if (empty($targetTrack->fk_dealer) && $stokUnit->fk_dealer) {
-                    $targetTrack->fk_dealer = $stokUnit->fk_dealer;
-                }
+        // 1. Cek jika request menyertakan koreksi nomor mesin (nomesin / no_mesin)
+        $inputMesin = $request->input('nomesin') ?? $request->input('no_mesin');
+        $isMesinChanged = false;
+
+        if (!blank($inputMesin)) {
+            $cleansingMesin = $this->cleansingNoMesinWithDetails($inputMesin);
+            $newCleansedMesin = $cleansingMesin['cleansed'];
+
+            if ($targetTrack->no_mesin !== $newCleansedMesin) {
+                $targetTrack->no_mesin = $newCleansedMesin;
+                $targetTrack->akurasi  = $cleansingMesin['overall_accuracy_pct'] . '%';
+                $isMesinChanged = true;
+
+                // Ambil ulang nama konsumen & fk_dealer untuk nomor mesin baru
+                $stokUnit = StokUnit::select('nm_customer', 'fk_dealer')
+                    ->where('no_mesin', $newCleansedMesin)
+                    ->first();
+                $targetTrack->nama_konsumen = $stokUnit?->nm_customer;
+                $targetTrack->fk_dealer     = $stokUnit?->fk_dealer;
+
+                // Ambil ulang tgl_mohon_samsat untuk nomor mesin baru
+                $bastd = DB::connection('pgsql_nms')
+                    ->table('data_unit.tblbastd_detail')
+                    ->where('fk_mesin', $newCleansedMesin)
+                    ->select('tgl_mohon_samsat')
+                    ->first();
+                $targetTrack->tgl_mohon_samsat = $bastd?->tgl_mohon_samsat
+                    ? Carbon::parse($bastd->tgl_mohon_samsat)->toDateString()
+                    : null;
             }
         }
 
-        if (empty($targetTrack->tgl_mohon_samsat)) {
-            $bastd = DB::connection('pgsql_nms')
-                ->table('data_unit.tblbastd_detail')
-                ->where('fk_mesin', $targetTrack->no_mesin)
-                ->select('tgl_mohon_samsat')
-                ->first();
-            if ($bastd?->tgl_mohon_samsat) {
-                $targetTrack->tgl_mohon_samsat = Carbon::parse($bastd->tgl_mohon_samsat)->toDateString();
+        // 2. Cek jika request menyertakan koreksi nomor BPKB (nobpkb / no_bpkb)
+        $inputBpkb = $request->input('nobpkb') ?? $request->input('no_bpkb');
+        if (!blank($inputBpkb)) {
+            $newCleansedBpkb = $this->cleansingNoBpkb($inputBpkb);
+            if ($targetTrack->no_bpkb !== $newCleansedBpkb) {
+                $targetTrack->no_bpkb = $newCleansedBpkb;
+            }
+        }
+
+        // 3. Pastikan nama konsumen, fk_dealer, dan tgl_mohon_samsat terisi jika sebelumnya masih kosong
+        if (!$isMesinChanged) {
+            if (empty($targetTrack->nama_konsumen) || empty($targetTrack->fk_dealer)) {
+                $stokUnit = StokUnit::select('nm_customer', 'fk_dealer')
+                    ->where('no_mesin', $targetTrack->no_mesin)
+                    ->first();
+                if ($stokUnit) {
+                    if (empty($targetTrack->nama_konsumen) && $stokUnit->nm_customer) {
+                        $targetTrack->nama_konsumen = $stokUnit->nm_customer;
+                    }
+                    if (empty($targetTrack->fk_dealer) && $stokUnit->fk_dealer) {
+                        $targetTrack->fk_dealer = $stokUnit->fk_dealer;
+                    }
+                }
+            }
+
+            if (empty($targetTrack->tgl_mohon_samsat)) {
+                $bastd = DB::connection('pgsql_nms')
+                    ->table('data_unit.tblbastd_detail')
+                    ->where('fk_mesin', $targetTrack->no_mesin)
+                    ->select('tgl_mohon_samsat')
+                    ->first();
+                if ($bastd?->tgl_mohon_samsat) {
+                    $targetTrack->tgl_mohon_samsat = Carbon::parse($bastd->tgl_mohon_samsat)->toDateString();
+                }
             }
         }
 
@@ -992,12 +1035,15 @@ class BpkbController extends Controller
             'message'  => 'Proses BPKB berhasil diantrikan ulang.',
             'track_id' => (string) $targetTrack->id,
             'data'     => [
-                'track_id'      => (string) $targetTrack->id,
-                'no_mesin'      => (string) $targetTrack->no_mesin,
-                'no_bpkb'       => (string) $targetTrack->no_bpkb,
-                'nama_konsumen' => $targetTrack->nama_konsumen,
-                'stage'         => $targetTrack->stage,
-                'status'        => $targetTrack->status,
+                'track_id'         => (string) $targetTrack->id,
+                'no_mesin'         => (string) $targetTrack->no_mesin,
+                'no_bpkb'          => (string) $targetTrack->no_bpkb,
+                'nama_konsumen'    => $targetTrack->nama_konsumen,
+                'fk_dealer'        => $targetTrack->fk_dealer,
+                'tgl_mohon_samsat' => $targetTrack->tgl_mohon_samsat ? Carbon::parse($targetTrack->tgl_mohon_samsat)->toDateString() : null,
+                'stage'            => $targetTrack->stage,
+                'status'           => $targetTrack->status,
+                'akurasi'          => $targetTrack->akurasi,
             ],
         ], 200);
     }
