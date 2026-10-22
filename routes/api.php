@@ -28,7 +28,7 @@ Route::middleware('check-secret-key')->group(function () {
             ->first();
 
         if (empty($dealers)) {
-            $response['dealer'] = 'Data tidak ditemukan';
+            $response['message'] = 'Data tidak ditemukan';
             return response()->json($response, 404);
         }
 
