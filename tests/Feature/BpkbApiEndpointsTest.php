@@ -178,6 +178,7 @@ class BpkbApiEndpointsTest extends TestCase
 
     public function test_retry_with_corrected_no_mesin(): void
     {
+        \Illuminate\Support\Facades\Queue::fake();
         \Illuminate\Support\Facades\Storage::fake('secure');
         $pdfPath = 'bpkb/pdf/test_retry.pdf';
         \Illuminate\Support\Facades\Storage::disk('secure')->put($pdfPath, 'dummy pdf content');
@@ -207,5 +208,36 @@ class BpkbApiEndpointsTest extends TestCase
 
         $track->refresh();
         $this->assertEquals('JMF2E1838648', $track->no_mesin);
+        \Illuminate\Support\Facades\Queue::assertPushed(\App\Jobs\ProcessBpkbJob::class);
+    }
+
+    public function test_process_bpkb_job_fails_when_stokunit_not_found_but_preserves_pdf(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('secure');
+        $pdfPath = 'bpkb/pdf/sample.pdf';
+        \Illuminate\Support\Facades\Storage::disk('secure')->put($pdfPath, 'sample pdf content');
+
+        $track = BpkbProcessTrack::create([
+            'no_mesin'  => 'NONEXISTENT999',
+            'no_bpkb'   => 'X-99999999',
+            'stage'     => 'pending',
+            'status'    => 'queued',
+            'pdf_path'  => $pdfPath,
+        ]);
+
+        $job = new \App\Jobs\ProcessBpkbJob($track);
+
+        try {
+            $job->handle();
+            $this->fail('Expected exception was not thrown.');
+        } catch (\Exception $e) {
+            $this->assertStringContainsString('Data stok unit untuk no. mesin', $e->getMessage());
+        }
+
+        $track->refresh();
+        $this->assertEquals('failed', $track->status);
+        $this->assertStringContainsString('tidak ditemukan di database H1_DOS.stokunit', $track->error_message);
+        $this->assertEquals($pdfPath, $track->pdf_path);
+        $this->assertTrue(\Illuminate\Support\Facades\Storage::disk('secure')->exists($pdfPath));
     }
 }

@@ -30,13 +30,14 @@ class ProcessBpkbJob implements ShouldQueue
 
         try {
             $this->createPdf();
-            $this->cleanupTempImages();
             $this->updateStokUnit();
             $this->updateTglBpkbSiap();
+            $this->cleanupTempImages();
 
             $this->track->update([
-                'stage'  => 'completed',
-                'status' => 'completed',
+                'stage'         => 'completed',
+                'status'        => 'completed',
+                'error_message' => null,
             ]);
         } catch (\Exception $e) {
             $this->track->update([
@@ -308,10 +309,26 @@ class ProcessBpkbJob implements ShouldQueue
         $this->track->update(['stage' => 'update_stok_unit']);
         sleep(2);
 
+        $noMesin = $this->track->no_mesin;
+        $noBpkb  = $this->track->no_bpkb;
+
+        if (blank($noMesin) || blank($noBpkb)) {
+            throw new \Exception("Gagal update stok unit: nomor mesin atau nomor BPKB kosong.");
+        }
+
+        $stokUnit = DB::connection('pgsql_nms')
+            ->table('H1_DOS.stokunit')
+            ->where('no_mesin', $noMesin)
+            ->first();
+
+        if (! $stokUnit) {
+            throw new \Exception("Data stok unit untuk no. mesin '{$noMesin}' tidak ditemukan di database H1_DOS.stokunit.");
+        }
+
         DB::connection('pgsql_nms')
             ->table('H1_DOS.stokunit')
-            ->where('no_mesin', $this->track->no_mesin)
-            ->update(['no_bpkb' => $this->track->no_bpkb]);
+            ->where('no_mesin', $noMesin)
+            ->update(['no_bpkb' => $noBpkb]);
     }
 
     private function updateTglBpkbSiap(): void
@@ -323,12 +340,7 @@ class ProcessBpkbJob implements ShouldQueue
         $noBpkb  = $this->track->no_bpkb;
 
         if (blank($noMesin) || blank($noBpkb)) {
-            Log::warning('Gagal update tgl_bpkb_siap: no_mesin atau no_bpkb kosong.', [
-                'track_id' => $this->track->id,
-                'no_mesin' => $noMesin,
-                'no_bpkb'  => $noBpkb,
-            ]);
-            return;
+            throw new \Exception("Gagal update tgl_bpkb_siap: nomor mesin atau nomor BPKB kosong.");
         }
 
         $now = now();
@@ -339,14 +351,10 @@ class ProcessBpkbJob implements ShouldQueue
             ->first();
 
         if (! $databastd) {
-            Log::warning('Data BASTD tidak ditemukan untuk update BPKB.', [
-                'track_id' => $this->track->id,
-                'no_mesin' => $noMesin,
-            ]);
-            return;
+            throw new \Exception("Data BASTD untuk no. mesin '{$noMesin}' tidak ditemukan di database data_unit.tblbastd_detail.");
         }
 
-        // Simpan tgl_mohon_samsat ke track
+        // Simpan tgl_mohon_samsat ke track jika ada
         $trackUpdates = [];
         if ($databastd->tgl_mohon_samsat) {
             $trackUpdates['tgl_mohon_samsat'] = Carbon::parse($databastd->tgl_mohon_samsat)->toDateString();
@@ -377,10 +385,7 @@ class ProcessBpkbJob implements ShouldQueue
             ]);
 
         if ($affected === 0) {
-            Log::warning('Data BASTD tidak ditemukan untuk update BPKB.', [
-                'track_id' => $this->track->id,
-                'no_mesin' => $noMesin,
-            ]);
+            throw new \Exception("Gagal memperbarui tabel BASTD detail untuk no. mesin '{$noMesin}'.");
         }
     }
 }
