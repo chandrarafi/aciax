@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\BpkbProcessTrack;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -248,12 +249,6 @@ class ProcessBpkbJob implements ShouldQueue
         return null;
     }
 
-    /**
-     * Terapkan efek scan dokumen (CamScanner style):
-     * 1. Meningkatkan kontras dokumen agar teks/tinta/stempel lebih jelas dan pekat.
-     * 2. Mencerahkan background kertas agar putih bersih alami.
-     * 3. Penajaman teks (Gentle Cross-Laplacian Sharpen) agar hasil seperti optik flatbed scanner.
-     */
     private function applyScanEffect(&$img): void
     {
         $contrast = \App\Models\BpkbSetting::getScanContrast();
@@ -349,6 +344,27 @@ class ProcessBpkbJob implements ShouldQueue
                 'no_mesin' => $noMesin,
             ]);
             return;
+        }
+
+        // Simpan tgl_mohon_samsat ke track
+        $trackUpdates = [];
+        if ($databastd->tgl_mohon_samsat) {
+            $trackUpdates['tgl_mohon_samsat'] = Carbon::parse($databastd->tgl_mohon_samsat)->toDateString();
+        }
+
+        // Backfill fk_dealer jika pada track masih kosong
+        if (empty($this->track->fk_dealer)) {
+            $dealer = DB::connection('pgsql_nms')
+                ->table('data_unit.tblstock_unit')
+                ->where('no_mesin', $noMesin)
+                ->value('fk_dealer');
+            if ($dealer) {
+                $trackUpdates['fk_dealer'] = $dealer;
+            }
+        }
+
+        if (!empty($trackUpdates)) {
+            $this->track->update($trackUpdates);
         }
 
         $affected = DB::connection('pgsql_nms')

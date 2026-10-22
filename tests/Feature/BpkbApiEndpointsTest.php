@@ -111,4 +111,68 @@ class BpkbApiEndpointsTest extends TestCase
         $response = $this->get("/bpkb/download/{$track->id}");
         $response->assertStatus(200);
     }
+
+    public function test_by_dealer_endpoint(): void
+    {
+        BpkbProcessTrack::create([
+            'no_mesin'         => 'JME1E2977871',
+            'no_bpkb'          => 'W-02371871',
+            'nama_konsumen'    => 'Budi Santoso',
+            'fk_dealer'        => 'DLR01',
+            'tgl_mohon_samsat' => '2026-04-10',
+            'stage'            => 'completed',
+            'status'           => 'completed',
+        ]);
+
+        BpkbProcessTrack::create([
+            'no_mesin'         => 'JME1E2977872',
+            'no_bpkb'          => 'W-02371872',
+            'nama_konsumen'    => 'Siti Rahma',
+            'fk_dealer'        => 'DLR01',
+            'tgl_mohon_samsat' => '2026-04-10',
+            'stage'            => 'completed',
+            'status'           => 'completed',
+        ]);
+
+        BpkbProcessTrack::create([
+            'no_mesin'         => 'JME1E2977873',
+            'no_bpkb'          => 'W-02371873',
+            'nama_konsumen'    => 'Agus Pratama',
+            'fk_dealer'        => 'DLR02',
+            'tgl_mohon_samsat' => '2026-04-11',
+            'stage'            => 'pending',
+            'status'           => 'queued',
+        ]);
+
+        $response = $this->withHeaders($this->getHeaders())
+            ->getJson('/api/bpkb/by-dealer');
+
+        $response->assertStatus(200)
+            ->assertJsonStructure([
+                'status',
+                'message',
+                'summary' => [
+                    'total_dealers',
+                    'total_records',
+                    'total_completed',
+                    'total_processing',
+                    'total_queued',
+                    'total_failed',
+                ],
+                'data' => [
+                    '*' => [
+                        'fk_dealer',
+                        'nm_dealer',
+                        'total',
+                        'dates' => [
+                            '*' => [
+                                'tgl_mohon_samsat',
+                                'total',
+                                'details',
+                            ],
+                        ],
+                    ],
+                ],
+            ]);
+    }
 }

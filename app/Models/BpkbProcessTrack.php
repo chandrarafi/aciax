@@ -21,12 +21,15 @@ class BpkbProcessTrack extends Model
         'status',
         'error_message',
         'akurasi',
+        'fk_dealer',
+        'tgl_mohon_samsat'
     ];
 
     protected function casts(): array
     {
         return [
             'image_paths' => 'array',
+            'tgl_mohon_samsat' => 'date:Y-m-d',
         ];
     }
 

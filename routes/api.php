@@ -55,6 +55,8 @@ Route::middleware('check-secret-key')->group(function () {
     Route::post('/bpkb/retry', [BpkbController::class, 'retry']);
     Route::post('/bpkb/retry/{track}', [BpkbController::class, 'retry']);
     Route::post('/bpkb/retry-all-failed', [BpkbController::class, 'retryAllFailed']);
+    Route::get('/bpkb/by-dealer', [BpkbController::class, 'byDealer']);
+    Route::get('/bpkb/summary/dealer', [BpkbController::class, 'byDealer']);
 
     // API data_unit.tblbastd_detail
     Route::get('/bastd-detail', [BastdDetailController::class, 'index']);

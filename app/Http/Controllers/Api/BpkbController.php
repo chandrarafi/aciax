@@ -11,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use App\Models\TerimaBpkb;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class BpkbController extends Controller
@@ -19,7 +20,6 @@ class BpkbController extends Controller
     {
         $valid = $request->validated();
 
-        // Perform cleansing on requested no_mesin and no_bpkb
         $cleansingMesin  = $this->cleansingNoMesinWithDetails($valid['nomesin']);
         $cleansedNoMesin = $cleansingMesin['cleansed'];
         $akurasi         = $cleansingMesin['overall_accuracy_pct'] . '%';
@@ -31,14 +31,17 @@ class BpkbController extends Controller
             $imagePaths[] = $path;
         }
 
-        $stokUnit = StokUnit::select('nm_customer')
+        $stokUnit = StokUnit::select('nm_customer', 'fk_dealer')
             ->where('no_mesin', $cleansedNoMesin)
             ->first();
 
-        // Guard: cegah duplikat jika no_mesin yang sama masih dalam antrian atau sedang diproses
-        $existing = BpkbProcessTrack::where('no_mesin', $cleansedNoMesin)
-            ->whereIn('status', ['queued', 'processing'])
+        $bastd = DB::connection('pgsql_nms')
+            ->table('data_unit.tblbastd_detail')
+            ->where('fk_mesin', $cleansedNoMesin)
+            ->select('tgl_mohon_samsat')
             ->first();
+
+        $existing = BpkbProcessTrack::query()->where('no_mesin', $cleansedNoMesin)->whereIn('status', ['queued', 'processing'])->first();
 
         if ($existing) {
             return response()->json([
@@ -48,13 +51,15 @@ class BpkbController extends Controller
         }
 
         $track = BpkbProcessTrack::create([
-            'no_mesin'       => $cleansedNoMesin,
-            'no_bpkb'        => $cleansedNoBpkb,
-            'nama_konsumen'  => $stokUnit?->nm_customer,
-            'image_paths'    => $imagePaths,
-            'stage'          => 'pending',
-            'status'         => 'queued',
-            'akurasi'        => $akurasi,
+            'no_mesin'          => $cleansedNoMesin,
+            'no_bpkb'           => $cleansedNoBpkb,
+            'nama_konsumen'     => $stokUnit?->nm_customer,
+            'fk_dealer'         => $stokUnit?->fk_dealer,
+            'tgl_mohon_samsat'  => $bastd?->tgl_mohon_samsat ? Carbon::parse($bastd->tgl_mohon_samsat)->toDateString() : null,
+            'image_paths'       => $imagePaths,
+            'stage'             => 'pending',
+            'status'            => 'queued',
+            'akurasi'           => $akurasi,
         ]);
 
         ProcessBpkbJob::dispatch($track);
@@ -547,6 +552,8 @@ class BpkbController extends Controller
                 'no_mesin'             => $targetTrack->no_mesin,
                 'no_bpkb'              => $targetTrack->no_bpkb,
                 'nama_konsumen'        => $targetTrack->nama_konsumen,
+                'fk_dealer'            => $targetTrack->fk_dealer,
+                'tgl_mohon_samsat'     => $targetTrack->tgl_mohon_samsat ? Carbon::parse($targetTrack->tgl_mohon_samsat)->toDateString() : null,
                 'stage'                => $targetTrack->stage,
                 'status'               => $targetTrack->status,
                 'error_message'        => $targetTrack->error_message,
@@ -682,6 +689,11 @@ class BpkbController extends Controller
             $query->whereNotNull('pdf_path');
         }
 
+        // Filter dealer
+        if ($request->filled('fk_dealer')) {
+            $query->where('fk_dealer', $request->input('fk_dealer'));
+        }
+
         // Ringkasan statistik (Stats)
         $stats = [
             'total_all'        => (clone $query)->count(),
@@ -713,6 +725,8 @@ class BpkbController extends Controller
                 'no_mesin'             => (string) $track->no_mesin,
                 'no_bpkb'              => (string) $track->no_bpkb,
                 'nama_konsumen'        => $track->nama_konsumen,
+                'fk_dealer'            => $track->fk_dealer,
+                'tgl_mohon_samsat'     => $track->tgl_mohon_samsat ? Carbon::parse($track->tgl_mohon_samsat)->toDateString() : null,
                 'stage'                => $track->stage,
                 'status'               => $track->status,
                 'error_message'        => $track->error_message,
@@ -939,13 +953,29 @@ class BpkbController extends Controller
             ], 422);
         }
 
-        // Pastikan nama konsumen terisi jika sebelumnya kosong
-        if (empty($targetTrack->nama_konsumen)) {
-            $stokUnit = StokUnit::select('nm_customer')
+        // Pastikan nama konsumen, fk_dealer, dan tgl_mohon_samsat terisi jika sebelumnya kosong
+        if (empty($targetTrack->nama_konsumen) || empty($targetTrack->fk_dealer)) {
+            $stokUnit = StokUnit::select('nm_customer', 'fk_dealer')
                 ->where('no_mesin', $targetTrack->no_mesin)
                 ->first();
-            if ($stokUnit?->nm_customer) {
-                $targetTrack->nama_konsumen = $stokUnit->nm_customer;
+            if ($stokUnit) {
+                if (empty($targetTrack->nama_konsumen) && $stokUnit->nm_customer) {
+                    $targetTrack->nama_konsumen = $stokUnit->nm_customer;
+                }
+                if (empty($targetTrack->fk_dealer) && $stokUnit->fk_dealer) {
+                    $targetTrack->fk_dealer = $stokUnit->fk_dealer;
+                }
+            }
+        }
+
+        if (empty($targetTrack->tgl_mohon_samsat)) {
+            $bastd = DB::connection('pgsql_nms')
+                ->table('data_unit.tblbastd_detail')
+                ->where('fk_mesin', $targetTrack->no_mesin)
+                ->select('tgl_mohon_samsat')
+                ->first();
+            if ($bastd?->tgl_mohon_samsat) {
+                $targetTrack->tgl_mohon_samsat = Carbon::parse($bastd->tgl_mohon_samsat)->toDateString();
             }
         }
 
@@ -1009,12 +1039,28 @@ class BpkbController extends Controller
                 continue;
             }
 
-            if (empty($track->nama_konsumen)) {
-                $stokUnit = StokUnit::select('nm_customer')
+            if (empty($track->nama_konsumen) || empty($track->fk_dealer)) {
+                $stokUnit = StokUnit::select('nm_customer', 'fk_dealer')
                     ->where('no_mesin', $track->no_mesin)
                     ->first();
-                if ($stokUnit?->nm_customer) {
-                    $track->nama_konsumen = $stokUnit->nm_customer;
+                if ($stokUnit) {
+                    if (empty($track->nama_konsumen) && $stokUnit->nm_customer) {
+                        $track->nama_konsumen = $stokUnit->nm_customer;
+                    }
+                    if (empty($track->fk_dealer) && $stokUnit->fk_dealer) {
+                        $track->fk_dealer = $stokUnit->fk_dealer;
+                    }
+                }
+            }
+
+            if (empty($track->tgl_mohon_samsat)) {
+                $bastd = DB::connection('pgsql_nms')
+                    ->table('data_unit.tblbastd_detail')
+                    ->where('fk_mesin', $track->no_mesin)
+                    ->select('tgl_mohon_samsat')
+                    ->first();
+                if ($bastd?->tgl_mohon_samsat) {
+                    $track->tgl_mohon_samsat = Carbon::parse($bastd->tgl_mohon_samsat)->toDateString();
                 }
             }
 
@@ -1041,6 +1087,164 @@ class BpkbController extends Controller
             'skipped_count' => count($skipped),
             'retried'       => $retried,
             'skipped'       => $skipped,
+        ]);
+    }
+
+    /**
+     * API untuk menghitung data BPKB per fk_dealer dan tgl_mohon_samsat
+     * beserta detailnya, dikelompokkan berdasarkan fk_dealer.
+     *
+     * Filter opsional:
+     * - fk_dealer: filter kode dealer tertentu
+     * - tgl_mohon_samsat / date: filter tanggal mohon samsat (YYYY-MM-DD)
+     * - start_date & end_date: filter rentang tanggal mohon samsat
+     * - month: filter bulan (YYYY-MM)
+     * - status: filter status (completed, processing, queued, failed)
+     * - search: pencarian pada no_mesin, no_bpkb, nama_konsumen, atau fk_dealer
+     * - include_details: boolean (default: true)
+     * - sort_by: total (default) / fk_dealer
+     */
+    public function byDealer(Request $request): JsonResponse
+    {
+        $query = BpkbProcessTrack::query();
+
+        // 1. Filter fk_dealer
+        if ($request->filled('fk_dealer')) {
+            $query->where('fk_dealer', trim($request->input('fk_dealer')));
+        }
+
+        // 2. Filter status
+        if ($request->filled('status')) {
+            $query->where('status', trim($request->input('status')));
+        }
+
+        // 3. Filter tanggal spesifik
+        $date = $request->input('tgl_mohon_samsat') ?? $request->input('date');
+        if ($date) {
+            $query->whereDate('tgl_mohon_samsat', $date);
+        }
+
+        // 4. Filter rentang tanggal
+        if ($request->filled('start_date')) {
+            $query->whereDate('tgl_mohon_samsat', '>=', $request->input('start_date'));
+        }
+        if ($request->filled('end_date')) {
+            $query->whereDate('tgl_mohon_samsat', '<=', $request->input('end_date'));
+        }
+
+        // 5. Filter bulan (format: YYYY-MM)
+        if ($request->filled('month')) {
+            $month = trim($request->input('month'));
+            $query->where(function ($q) use ($month) {
+                $q->where('tgl_mohon_samsat', 'like', "{$month}%");
+            });
+        }
+
+        // 6. Search keyword
+        if ($request->filled('search')) {
+            $search = trim($request->input('search'));
+            $query->where(function ($q) use ($search) {
+                $q->where('no_mesin', 'like', "%{$search}%")
+                  ->orWhere('no_bpkb', 'like', "%{$search}%")
+                  ->orWhere('nama_konsumen', 'like', "%{$search}%")
+                  ->orWhere('fk_dealer', 'like', "%{$search}%");
+            });
+        }
+
+        $tracks = $query->orderBy('fk_dealer')
+            ->orderByDesc('tgl_mohon_samsat')
+            ->orderByDesc('created_at')
+            ->get();
+
+        // Ambil nama dealer dari DB pgsql_nms -> public.tbldealer
+        $dealerCodes = $tracks->pluck('fk_dealer')->filter()->unique()->values()->toArray();
+        $dealerNames = [];
+        if (!empty($dealerCodes)) {
+            try {
+                $dealerNames = DB::connection('pgsql_nms')
+                    ->table('public.tbldealer')
+                    ->whereIn('kd_dealer_md', $dealerCodes)
+                    ->pluck('nm_dealer', 'kd_dealer_md')
+                    ->toArray();
+            } catch (\Throwable $e) {
+                $dealerNames = [];
+            }
+        }
+
+        $includeDetails = $request->has('include_details') ? $request->boolean('include_details') : true;
+
+        // Kelompokkan per fk_dealer
+        $grouped = $tracks->groupBy(function ($item) {
+            return $item->fk_dealer ?: 'UNKNOWN';
+        });
+
+        $result = [];
+
+        foreach ($grouped as $dealerCode => $dealerTracks) {
+            $displayCode = $dealerCode === 'UNKNOWN' ? null : $dealerCode;
+            $dealerName = $displayCode ? ($dealerNames[$displayCode] ?? null) : 'Dealer Tidak Diketahui';
+
+            // Kelompokkan per tgl_mohon_samsat di dalam dealer
+            $byDateGrouped = $dealerTracks->groupBy(function ($item) {
+                return $item->tgl_mohon_samsat ? Carbon::parse($item->tgl_mohon_samsat)->toDateString() : 'Tanpa Tanggal';
+            });
+
+            $datesBreakdown = [];
+            foreach ($byDateGrouped as $tgl => $itemsOnDate) {
+                $dateEntry = [
+                    'tgl_mohon_samsat' => $tgl === 'Tanpa Tanggal' ? null : $tgl,
+                    'total'            => $itemsOnDate->count(),
+                ];
+
+                if ($includeDetails) {
+                    $dateEntry['details'] = $itemsOnDate->map(function (BpkbProcessTrack $item) {
+                        return [
+                            'track_id'         => (string) $item->id,
+                            'no_mesin'         => (string) $item->no_mesin,
+                            'no_bpkb'          => (string) $item->no_bpkb,
+                            'nama_konsumen'    => $item->nama_konsumen,
+                            'fk_dealer'        => $item->fk_dealer,
+                            'tgl_mohon_samsat' => $item->tgl_mohon_samsat ? Carbon::parse($item->tgl_mohon_samsat)->toDateString() : null,
+                            'status'           => $item->status,
+                            'stage'            => $item->stage,
+                            'pdf_path'         => $item->pdf_path,
+                            'file_url'         => $item->pdf_path ? url('/api/bpkb/file/' . $item->id) : null,
+                            'created_at'       => $item->created_at ? (is_string($item->created_at) ? $item->created_at : $item->created_at->format('Y-m-d H:i:s')) : null,
+                        ];
+                    })->values();
+                }
+
+                $datesBreakdown[] = $dateEntry;
+            }
+
+            $result[] = [
+                'fk_dealer' => $displayCode,
+                'nm_dealer' => $dealerName,
+                'total'     => $dealerTracks->count(),
+                'dates'     => $datesBreakdown,
+            ];
+        }
+
+        // Sorting grup dealer
+        $sortBy = $request->query('sort_by', 'total');
+        if ($sortBy === 'fk_dealer') {
+            usort($result, fn($a, $b) => strcmp($a['fk_dealer'] ?? '', $b['fk_dealer'] ?? ''));
+        } else {
+            usort($result, fn($a, $b) => $b['total'] <=> $a['total']);
+        }
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Data berhasil dikelompokkan per fk_dealer dan tgl_mohon_samsat.',
+            'summary' => [
+                'total_dealers'    => count($result),
+                'total_records'    => $tracks->count(),
+                'total_completed'  => $tracks->where('status', 'completed')->count(),
+                'total_processing' => $tracks->where('status', 'processing')->count(),
+                'total_queued'     => $tracks->where('status', 'queued')->count(),
+                'total_failed'     => $tracks->where('status', 'failed')->count(),
+            ],
+            'data'    => $result,
         ]);
     }
 }
