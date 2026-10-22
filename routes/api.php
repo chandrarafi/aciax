@@ -27,6 +27,11 @@ Route::middleware('check-secret-key')->group(function () {
             ->where('stokunit.no_mesin', $cleansingResult['cleansed'])
             ->first();
 
+        if (empty($dealers)) {
+            $response['dealer'] = 'Data tidak ditemukan';
+            return response()->json($response, 404);
+        }
+
         $response = $dealers ? (array) $dealers : [];
         $response['akurasi'] = $cleansingResult['overall_accuracy_pct'] . '%';
 
