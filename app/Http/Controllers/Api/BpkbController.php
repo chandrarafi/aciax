@@ -11,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use App\Models\TerimaBpkb;
+use App\Models\Dealer;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -553,6 +554,7 @@ class BpkbController extends Controller
                 'no_bpkb'              => $targetTrack->no_bpkb,
                 'nama_konsumen'        => $targetTrack->nama_konsumen,
                 'fk_dealer'            => $targetTrack->fk_dealer,
+                'nm_dealer'            => $targetTrack->nm_dealer,
                 'tgl_mohon_samsat'     => $targetTrack->tgl_mohon_samsat ? Carbon::parse($targetTrack->tgl_mohon_samsat)->toDateString() : null,
                 'stage'                => $targetTrack->stage,
                 'status'               => $targetTrack->status,
@@ -571,8 +573,7 @@ class BpkbController extends Controller
 
     public function activity(): JsonResponse
     {
-        // $monthNow = now()->format('Y-m');
-        $monthNow = '2026-04';
+        $monthNow = now()->format('Y-m');
         $targetBpkb = TerimaBpkb::where('tgl_tanda_terima', 'like', "{$monthNow}%")->count();
         $completedBpkb = BpkbProcessTrack::where('status', 'completed')
             ->where('created_at', 'like', "{$monthNow}%")
@@ -648,11 +649,29 @@ class BpkbController extends Controller
         // Search
         if ($request->filled('search')) {
             $search = trim($request->input('search'));
-            $query->where(function ($q) use ($search) {
+
+            $matchedDealerCodes = [];
+            try {
+                $matchedDealerCodes = DB::connection('pgsql_nms')
+                    ->table('public.tbldealer')
+                    ->where('nm_dealer', 'ilike', "%{$search}%")
+                    ->orWhere('kd_dealer_md', 'ilike', "%{$search}%")
+                    ->pluck('kd_dealer_md')
+                    ->toArray();
+            } catch (\Throwable $e) {
+                $matchedDealerCodes = [];
+            }
+
+            $query->where(function ($q) use ($search, $matchedDealerCodes) {
                 $q->where('no_mesin', 'like', "%{$search}%")
                   ->orWhere('no_bpkb', 'like', "%{$search}%")
                   ->orWhere('nama_konsumen', 'like', "%{$search}%")
-                  ->orWhere('id', 'like', "%{$search}%");
+                  ->orWhere('id', 'like', "%{$search}%")
+                  ->orWhere('fk_dealer', 'like', "%{$search}%");
+
+                if (!empty($matchedDealerCodes)) {
+                    $q->orWhereIn('fk_dealer', $matchedDealerCodes);
+                }
             });
         }
 
@@ -705,7 +724,7 @@ class BpkbController extends Controller
         ];
 
         // Sorting
-        $allowedSort = ['created_at', 'updated_at', 'nama_konsumen', 'no_mesin', 'no_bpkb'];
+        $allowedSort = ['created_at', 'updated_at', 'nama_konsumen', 'no_mesin', 'no_bpkb', 'fk_dealer', 'tgl_mohon_samsat'];
         $sortBy = in_array($request->query('sort_by'), $allowedSort) ? $request->query('sort_by') : 'created_at';
         $sortDir = strtolower($request->query('sort_direction', 'desc')) === 'asc' ? 'asc' : 'desc';
         $query->orderBy($sortBy, $sortDir);
@@ -714,7 +733,22 @@ class BpkbController extends Controller
         $perPage = max(1, min((int) $request->query('per_page', 15), 100));
         $paginator = $query->paginate($perPage);
 
-        $items = collect($paginator->items())->map(function (BpkbProcessTrack $track) {
+        // Ambil nama dealer dari DB pgsql_nms -> public.tbldealer
+        $dealerCodes = collect($paginator->items())->pluck('fk_dealer')->filter()->unique()->values()->toArray();
+        $dealerNames = [];
+        if (!empty($dealerCodes)) {
+            try {
+                $dealerNames = DB::connection('pgsql_nms')
+                    ->table('public.tbldealer')
+                    ->whereIn('kd_dealer_md', $dealerCodes)
+                    ->pluck('nm_dealer', 'kd_dealer_md')
+                    ->toArray();
+            } catch (\Throwable $e) {
+                $dealerNames = [];
+            }
+        }
+
+        $items = collect($paginator->items())->map(function (BpkbProcessTrack $track) use ($dealerNames) {
             $fileExists = $track->pdf_path && Storage::disk('secure')->exists($track->pdf_path);
             $fileSizeBytes = $fileExists ? Storage::disk('secure')->size($track->pdf_path) : 0;
             $fileSizeFormatted = $fileExists ? $this->formatBytes($fileSizeBytes) : null;
@@ -726,6 +760,7 @@ class BpkbController extends Controller
                 'no_bpkb'              => (string) $track->no_bpkb,
                 'nama_konsumen'        => $track->nama_konsumen,
                 'fk_dealer'            => $track->fk_dealer,
+                'nm_dealer'            => $track->fk_dealer ? ($dealerNames[$track->fk_dealer] ?? null) : null,
                 'tgl_mohon_samsat'     => $track->tgl_mohon_samsat ? Carbon::parse($track->tgl_mohon_samsat)->toDateString() : null,
                 'stage'                => $track->stage,
                 'status'               => $track->status,

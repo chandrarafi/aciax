@@ -240,4 +240,45 @@ class BpkbApiEndpointsTest extends TestCase
         $this->assertEquals($pdfPath, $track->pdf_path);
         $this->assertTrue(\Illuminate\Support\Facades\Storage::disk('secure')->exists($pdfPath));
     }
+
+    public function test_monitoring_endpoint_returns_nm_dealer(): void
+    {
+        $track = BpkbProcessTrack::create([
+            'no_mesin'         => 'JME1E2977899',
+            'no_bpkb'          => 'W-02371899',
+            'nama_konsumen'    => 'John Doe',
+            'fk_dealer'        => '01001',
+            'tgl_mohon_samsat' => '2026-03-15',
+            'stage'            => 'completed',
+            'status'           => 'completed',
+        ]);
+
+        $response = $this->withHeaders($this->getHeaders())
+            ->getJson('/api/bpkb/monitoring');
+
+        $response->assertStatus(200)
+            ->assertJsonStructure([
+                'status',
+                'stats',
+                'pagination',
+                'data' => [
+                    '*' => [
+                        'track_id',
+                        'no_mesin',
+                        'no_bpkb',
+                        'nama_konsumen',
+                        'fk_dealer',
+                        'nm_dealer',
+                        'tgl_mohon_samsat',
+                        'stage',
+                        'status',
+                    ],
+                ],
+            ]);
+
+        $item = collect($response->json('data'))->firstWhere('track_id', (string) $track->id);
+        $this->assertNotNull($item);
+        $this->assertEquals('01001', $item['fk_dealer']);
+        $this->assertArrayHasKey('nm_dealer', $item);
+    }
 }

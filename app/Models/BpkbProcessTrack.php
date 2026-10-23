@@ -42,4 +42,14 @@ class BpkbProcessTrack extends Model
     {
         return 'string';
     }
+
+    public function dealer(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Dealer::class, 'fk_dealer', 'kd_dealer_md');
+    }
+
+    public function getNmDealerAttribute(): ?string
+    {
+        return $this->dealer?->nm_dealer;
+    }
 }
