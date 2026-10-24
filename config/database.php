@@ -57,7 +57,7 @@ return [
             'charset' => env('DB_CHARSET', 'utf8'),
             'prefix' => '',
             'prefix_indexes' => true,
-            'search_path' => 'H1_DOS',
+            'search_path' => 'data_unit',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
         ],
 

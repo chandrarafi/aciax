@@ -20,7 +20,7 @@ Route::middleware('check-secret-key')->group(function () {
         $cleansingResult = $bpkbController->cleansingNoMesinWithDetails($request->input('nomesin', ''));
 
         $dealers = DB::connection('pgsql_nms')
-            ->table('H1_DOS.stokunit as stokunit')
+            ->table('data_unit.tblstock_unit as stokunit')
             ->select(['stokunit.fk_dealer', 'd.nm_dealer','stokunit.no_mesin',
                 DB::raw("CASE WHEN stokunit.bentuk_penjualan = '1' THEN 'Cash' WHEN stokunit.bentuk_penjualan = '2' THEN 'Kredit' ELSE 'Lainnya' END as bentuk_penjualan"),])
             ->join('public.tbldealer as d', 'd.kd_dealer_md', '=', 'stokunit.fk_dealer')

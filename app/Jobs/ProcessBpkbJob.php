@@ -317,18 +317,21 @@ class ProcessBpkbJob implements ShouldQueue
         }
 
         $stokUnit = DB::connection('pgsql_nms')
-            ->table('H1_DOS.stokunit')
+            ->table('data_unit.tblstock_unit')
             ->where('no_mesin', $noMesin)
             ->first();
 
         if (! $stokUnit) {
-            throw new \Exception("Data stok unit untuk no. mesin '{$noMesin}' tidak ditemukan di database H1_DOS.stokunit.");
+            throw new \Exception("Data stok unit untuk no. mesin '{$noMesin}' tidak ditemukan di database stokunit.");
         }
 
         DB::connection('pgsql_nms')
-            ->table('H1_DOS.stokunit')
+            ->table('data_unit.tblstock_unit')
             ->where('no_mesin', $noMesin)
-            ->update(['no_bpkb' => $noBpkb]);
+            ->update([
+                'no_bpkb' => $noBpkb,
+                'tgl_input_bpkb' => now()
+            ]);
     }
 
     private function updateTglBpkbSiap(): void
@@ -382,6 +385,7 @@ class ProcessBpkbJob implements ShouldQueue
                 'no_bpkb'        => $noBpkb,
                 'tgl_input_bpkb' => $now,
                 'tgl_bpkb_siap'  => $databastd->tgl_mohon_samsat,
+                'is_input_bpkb'  => true,
             ]);
 
         if ($affected === 0) {

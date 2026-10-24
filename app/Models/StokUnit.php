@@ -12,10 +12,11 @@ class StokUnit extends Model
     protected $keyType = 'string';
     protected $fillable = [
         'no_bpkb',
+        'tgl_input_bpkb',
     ];
 
     public $timestamps = false;
-    
+
     public function masterCustomer()
     {
         return $this->hasOne(MasterCustomer::class, 'IDCustomer', 'id_an');

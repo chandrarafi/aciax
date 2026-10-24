@@ -236,7 +236,7 @@ class BpkbApiEndpointsTest extends TestCase
 
         $track->refresh();
         $this->assertEquals('failed', $track->status);
-        $this->assertStringContainsString('tidak ditemukan di database H1_DOS.stokunit', $track->error_message);
+        $this->assertStringContainsString('tidak ditemukan di database stokunit', $track->error_message);
         $this->assertEquals($pdfPath, $track->pdf_path);
         $this->assertTrue(\Illuminate\Support\Facades\Storage::disk('secure')->exists($pdfPath));
     }
